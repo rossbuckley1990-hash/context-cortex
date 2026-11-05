@@ -21,7 +21,7 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "test": "node --test test/ && node scripts/check-schemas.mjs",
+    "test": "node --test \"test/*.test.js\" && node scripts/check-schemas.mjs",
     "check": "node scripts/check-schemas.mjs",
     "mcp": "node bin/cortex.js mcp",
     "example": "node scripts/make-example.mjs"
