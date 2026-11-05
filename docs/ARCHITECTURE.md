@@ -1,9 +1,13 @@
-# Architecture (draft 0)
+# Architecture
 
-**Status: a design. Nothing here is implemented.** It turns the [proposal](PROPOSAL.md) into components,
-data and rules, and takes account of [what RightClick X has measured](STARTING-EVIDENCE.md). Where the
-evidence leaves a design choice open, this page says so, and [EXPERIMENT-001](EXPERIMENT-001.md) is
-designed to settle it.
+**Status: v0.1.0 implements this design as a standalone MCP server and CLI.** The owner decided on
+5 November 2026 that Context Cortex does not embed RightClick X. Its bottom layer is its own sandboxed
+program runner, evidence ledger and artefact store, not the RightClick X runtime that §2 originally
+drew. The [README](../README.md) lists what is built and what is not.
+
+This page turns the [proposal](PROPOSAL.md) into components, data and rules, and takes account of
+[what RightClick X has measured](STARTING-EVIDENCE.md). Where the evidence leaves a design choice open,
+this page says so, and [EXPERIMENT-001](EXPERIMENT-001.md) is designed to settle it.
 
 ## 1. The working hypothesis: the model proposes, the engine disposes
 
@@ -120,8 +124,19 @@ plus one engine behaviour:
 | `context_simulate` | later | Could be a dry-run mode of `context_compose` |
 | `context_possibilities` | later, but measured | EXPERIMENT-001 computes the reachable-outcome diff offline as a metric |
 
-That would take the interface from 13 tools to 17. Whether the extra tools live inside RightClick X or
-in a separate package that drives it is open (§8).
+**What v0.1.0 ships:** six tools on a standalone server.
+
+| Tool | Covers |
+|---|---|
+| `context_status` | Grant, sandbox, counts, ledger integrity |
+| `context_goal` | `context_goal` and `context_gap`; with no arguments, `context_possibilities` with a `since` diff |
+| `context_experiment` | `context_experiment`, plus `probe` (usage text), `calibrate` (witnesses), `sample` and `claims` |
+| `context_crystallize` | `context_crystallize`, with the self-test |
+| `context_skill` | Listing, explaining and running skills |
+| `context_transfer` | `context_transfer`; import revalidates by re-running everything, which also covers part of `context_evolve` |
+
+Staleness (part of `context_evolve`) is checked on every read: a changed program digest makes claims
+stale. `context_simulate` is not built.
 
 ## 5. Witnesses, including ones the model writes
 
@@ -187,7 +202,7 @@ The proposal's limit is non-negotiable, so it is enforced in the engine, not by 
 | Decision | Options | Settled by |
 |---|---|---|
 | Who designs experiments | engine rules, the model, or both | EXPERIMENT-001 arms C-engine and C-model |
-| Where Cortex lives | a package that drives RightClick X through its library API and serves the extra tools, or changes inside RightClick X | Start as a package: it keeps RightClick X's interface unchanged until the experiment earns the change |
+| Where Cortex lives | **settled**: standalone, its own MCP server and CLI, no RightClick X inside | The owner, 5 November 2026 |
 | Witness independence for model-authored witnesses | the four rules in §5, or stricter (a second model must write the witness) | Calibration failure rate in EXPERIMENT-001 |
 | Skill granularity | one skill per goal, or reusable sub-skills | Compounding metric in EXPERIMENT-001 |
 | License | none yet (RightClick X is Apache-2.0) | Owner |

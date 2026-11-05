@@ -1,0 +1,980 @@
+{
+  "schema": "context-cortex/transfer-bundle/v0",
+  "exportedAt": "2026-11-05T23:56:16.130Z",
+  "exportedBy": {
+    "kind": "operator",
+    "id": "example"
+  },
+  "sourceEnvironment": {
+    "fingerprint": "sha256:399f028912084af8c9b4eb2f78cc12329537e07c22262fe248e9efe11df4f8a8",
+    "description": "darwin-arm64; /usr/bin/gzip, /usr/bin/gzip"
+  },
+  "skills": [
+    {
+      "schema": "context-cortex/skill/v0",
+      "id": "gzip-verified",
+      "title": "Compress text with gzip, verified lossless",
+      "objective": "Compress a text file so that decompressing it returns exactly the original bytes.",
+      "goal": {
+        "have": [
+          "text/plain"
+        ],
+        "want": [
+          "application/gzip"
+        ],
+        "preserve": [
+          "bytes"
+        ]
+      },
+      "steps": [
+        {
+          "id": "compress",
+          "operation": "gzip.compress",
+          "bind": {
+            "data": "input.text"
+          }
+        }
+      ],
+      "prerequisites": {
+        "programs": [
+          {
+            "path": "/usr/bin/gzip",
+            "digest": "sha256:80c36b28a931410775eb7428b82b8116303b5f178efcc6a89d59454630295794"
+          }
+        ],
+        "formats": [
+          "text/plain",
+          "application/gzip"
+        ],
+        "claims": [
+          "gzip.compress:accepts:data",
+          "gzip.compress:produces:stdout"
+        ],
+        "authority": {
+          "effectClasses": [
+            "sandbox-write"
+          ],
+          "executables": [
+            "/usr/bin/gzip"
+          ],
+          "network": false
+        }
+      },
+      "successConditions": [
+        {
+          "witness": "gzip-roundtrip",
+          "check": "bytes preserved",
+          "on": "steps.compress.stdout",
+          "property": "bytes"
+        }
+      ],
+      "limitations": [],
+      "provenance": {
+        "acquiredBy": {
+          "kind": "operator",
+          "id": "test"
+        },
+        "acquiredAt": "2026-11-05T23:56:16.127Z",
+        "demonstrations": [
+          {
+            "trial": "trial-47",
+            "digest": "sha256:46820980c3879c37e8c4bc391475816069a43ec0ecf802bc2e16215f7b01df14"
+          },
+          {
+            "trial": "witness-49",
+            "digest": "sha256:959214e49ba8f0cb1eb801652582f841d76838220f138ca1b86e4859501a85c5"
+          }
+        ],
+        "operations": [
+          "gzip.compress"
+        ]
+      },
+      "selfTest": {
+        "fixtures": [
+          {
+            "id": "text",
+            "inputs": {
+              "text": "sha256:37b6523febbd831925252032539d86b5df4e9386edb40c52ade901f600ab1fe2"
+            },
+            "expect": "pass"
+          },
+          {
+            "id": "binary-is-refused",
+            "inputs": {
+              "text": "sha256:02a3e298f1533f62558c58e4c70edcab9af5a50d62d925fd5390942020fb0fb8"
+            },
+            "expect": "refuse"
+          }
+        ]
+      },
+      "definition": {
+        "id": "gzip-verified",
+        "title": "Compress text with gzip, verified lossless",
+        "objective": "Compress a text file so that decompressing it returns exactly the original bytes.",
+        "inputs": {
+          "text": "text/plain"
+        },
+        "steps": [
+          {
+            "id": "compress",
+            "operation": "gzip.compress",
+            "bind": {
+              "data": "input.text"
+            }
+          }
+        ],
+        "output": "steps.compress.stdout",
+        "preserve": [
+          "bytes"
+        ],
+        "successConditions": [
+          {
+            "witness": "gzip-roundtrip",
+            "bind": {
+              "original": "input.text",
+              "compressed": "steps.compress.stdout"
+            },
+            "property": "bytes"
+          }
+        ],
+        "limitations": [],
+        "selfTest": {
+          "fixtures": [
+            {
+              "id": "text",
+              "inputs": {
+                "text": "sha256:37b6523febbd831925252032539d86b5df4e9386edb40c52ade901f600ab1fe2"
+              },
+              "expect": "pass"
+            },
+            {
+              "id": "binary-is-refused",
+              "inputs": {
+                "text": "sha256:02a3e298f1533f62558c58e4c70edcab9af5a50d62d925fd5390942020fb0fb8"
+              },
+              "expect": "refuse"
+            }
+          ]
+        },
+        "outputFormat": "application/gzip"
+      },
+      "status": "established",
+      "revision": "sha256:1d710e9a9de59a5d64aff0a6cc2687696ceeae02f9c7d5d972b2b83aae91c0bb"
+    }
+  ],
+  "operations": [
+    {
+      "id": "gzip.compress",
+      "program": "/usr/bin/gzip",
+      "args": [
+        "-n",
+        "-c",
+        "{in:data}"
+      ],
+      "inputs": {
+        "data": "text/plain"
+      },
+      "outputs": {
+        "stdout": "application/gzip"
+      },
+      "pin": {
+        "path": "/usr/bin/gzip",
+        "digest": "sha256:80c36b28a931410775eb7428b82b8116303b5f178efcc6a89d59454630295794"
+      }
+    },
+    {
+      "id": "gzip.decompress",
+      "program": "/usr/bin/gzip",
+      "args": [
+        "-d",
+        "-c",
+        "{in:data}"
+      ],
+      "inputs": {
+        "data": "application/gzip"
+      },
+      "outputs": {
+        "stdout": "text/plain"
+      },
+      "pin": {
+        "path": "/usr/bin/gzip",
+        "digest": "sha256:80c36b28a931410775eb7428b82b8116303b5f178efcc6a89d59454630295794"
+      }
+    }
+  ],
+  "experiments": [
+    {
+      "id": "sha256:827bf5b2b576550d2a503faa6f08f65e2b9619d49aa9fc33c48a9ea2e3b0afb3",
+      "operation": "gzip.compress",
+      "spec": {
+        "operation": {
+          "id": "gzip.compress",
+          "program": "/usr/bin/gzip",
+          "args": [
+            "-n",
+            "-c",
+            "{in:data}"
+          ],
+          "inputs": {
+            "data": "text/plain"
+          },
+          "outputs": {
+            "stdout": "application/gzip"
+          }
+        },
+        "trials": [
+          {
+            "inputs": {
+              "data": "sha256:37b6523febbd831925252032539d86b5df4e9386edb40c52ade901f600ab1fe2"
+            },
+            "expect": "success"
+          },
+          {
+            "inputs": {
+              "data": "sha256:5863163dc4136e9c7e38a432a8bdd4e4bd0355ef5a5322af3eb2f39edf2d7dbe"
+            },
+            "expect": "success"
+          },
+          {
+            "inputs": {
+              "data": "sha256:404e8f6684e7b3ec413e8bbb0c3d2100000717e7d301827836525145945a152c"
+            },
+            "expect": "success"
+          }
+        ],
+        "hypotheses": [],
+        "controls": false
+      }
+    },
+    {
+      "id": "sha256:c294c7403c84a00b27327293ac9254450f89d9a71975dbf72debb1f30ed600d9",
+      "operation": "gzip.decompress",
+      "spec": {
+        "operation": {
+          "id": "gzip.decompress",
+          "program": "/usr/bin/gzip",
+          "args": [
+            "-d",
+            "-c",
+            "{in:data}"
+          ],
+          "inputs": {
+            "data": "application/gzip"
+          },
+          "outputs": {
+            "stdout": "text/plain"
+          }
+        },
+        "trials": [
+          {
+            "inputs": {
+              "data": "sha256:7b9bb2399d34922e73da7ecf0f94b9c5550ae627df251ad36024d407bde9d17f"
+            },
+            "expect": "success"
+          },
+          {
+            "inputs": {
+              "data": "sha256:89c84ea48dd5eb7a6d61f7abb082cf321a7fc482a5f7c811c52f75918c2c29a7"
+            },
+            "expect": "success"
+          },
+          {
+            "inputs": {
+              "data": "sha256:e0ca5ce07255762df54b5d8062d8f488b9754cbc95f77413a0cbaf7f60e054cd"
+            },
+            "expect": "success"
+          }
+        ],
+        "hypotheses": [],
+        "controls": {
+          "kinds": [
+            "truncate",
+            "corrupt-header"
+          ],
+          "limit": 2
+        }
+      }
+    },
+    {
+      "id": "sha256:a8b689bf5124a8f960bd82d930f457abf2f8c1b4029b4daad59fe677a4e4f3b5",
+      "operation": "gzip.compress",
+      "spec": {
+        "operation": {
+          "id": "gzip.compress",
+          "program": "/usr/bin/gzip",
+          "args": [
+            "-n",
+            "-c",
+            "{in:data}"
+          ],
+          "inputs": {
+            "data": "text/plain"
+          },
+          "outputs": {
+            "stdout": "application/gzip"
+          }
+        },
+        "trials": [
+          {
+            "inputs": {
+              "data": "sha256:37b6523febbd831925252032539d86b5df4e9386edb40c52ade901f600ab1fe2"
+            },
+            "expect": "success"
+          },
+          {
+            "inputs": {
+              "data": "sha256:5863163dc4136e9c7e38a432a8bdd4e4bd0355ef5a5322af3eb2f39edf2d7dbe"
+            },
+            "expect": "success"
+          }
+        ],
+        "hypotheses": [
+          {
+            "id": "lossless",
+            "kind": "preservation",
+            "text": "decompressing the output returns the input exactly",
+            "property": "bytes",
+            "value": "exact",
+            "check": {
+              "witness": "gzip-roundtrip",
+              "bind": {
+                "original": "input.data",
+                "compressed": "output.stdout"
+              }
+            }
+          }
+        ],
+        "controls": false
+      }
+    }
+  ],
+  "witnesses": [
+    {
+      "id": "gzip-roundtrip",
+      "origin": "model-authored",
+      "definition": {
+        "id": "gzip-roundtrip",
+        "builtin": "bytes-equal",
+        "params": [
+          "original",
+          "compressed"
+        ],
+        "via": {
+          "compressed": "gzip.decompress"
+        }
+      },
+      "calibrationSpec": {
+        "witness": {
+          "id": "gzip-roundtrip",
+          "builtin": "bytes-equal",
+          "params": [
+            "original",
+            "compressed"
+          ],
+          "via": {
+            "compressed": "gzip.decompress"
+          }
+        },
+        "references": [
+          {
+            "bind": {
+              "original": "sha256:37b6523febbd831925252032539d86b5df4e9386edb40c52ade901f600ab1fe2",
+              "compressed": "sha256:7b9bb2399d34922e73da7ecf0f94b9c5550ae627df251ad36024d407bde9d17f"
+            }
+          },
+          {
+            "bind": {
+              "original": "sha256:5863163dc4136e9c7e38a432a8bdd4e4bd0355ef5a5322af3eb2f39edf2d7dbe",
+              "compressed": "sha256:89c84ea48dd5eb7a6d61f7abb082cf321a7fc482a5f7c811c52f75918c2c29a7"
+            }
+          }
+        ],
+        "mutations": [],
+        "mutate": {
+          "param": "compressed",
+          "kinds": [
+            "truncate",
+            "corrupt-header",
+            "flip-middle"
+          ]
+        }
+      },
+      "calibration": {
+        "status": "calibrated",
+        "referencesAccepted": 2,
+        "mutationsRejected": 6,
+        "mutationsTried": 6
+      }
+    }
+  ],
+  "claims": [
+    {
+      "schema": "context-cortex/affordance-claim/v0",
+      "id": "gzip.compress:accepts:data",
+      "operation": "gzip.compress",
+      "subjectPins": [
+        {
+          "path": "/usr/bin/gzip",
+          "digest": "sha256:80c36b28a931410775eb7428b82b8116303b5f178efcc6a89d59454630295794"
+        }
+      ],
+      "kind": "precondition",
+      "statement": {
+        "text": "gzip.compress accepts text/plain as data",
+        "property": "input.data.format",
+        "value": "text/plain"
+      },
+      "state": "established",
+      "source": "experiment",
+      "evidence": {
+        "supporting": [
+          {
+            "trial": "trial-12",
+            "digest": "sha256:dd2adac38d39b09f01553085494543b2e42457e59da79e5cee8055960475cd0d"
+          },
+          {
+            "trial": "trial-13",
+            "digest": "sha256:fe485c5c6f49e8fe84bb01641d482af57bf7339e8047bd181a0d65382df49f46"
+          },
+          {
+            "trial": "trial-14",
+            "digest": "sha256:65167b2db0c8a78989f5dc01b54a1afc49d7c876fc1a5d00e0fd2506d4b25a3a"
+          },
+          {
+            "trial": "trial-40",
+            "digest": "sha256:6d7c404166b82a92e7cfb91a0d5b09205fd7768466b90966587455f677769d1d"
+          },
+          {
+            "trial": "trial-41",
+            "digest": "sha256:942f5c205323b2d460ef047c859263b578a2da66b813b20e87065dd2061f35de"
+          }
+        ],
+        "refuting": [],
+        "witnesses": [
+          {
+            "id": "builtin:format-detector",
+            "origin": "built-in",
+            "digest": "sha256:1ef775ea47b81108bb14d8c1a2b976fb257226a426f3562b2dd764f5c0993ff8",
+            "calibration": {
+              "status": "calibrated",
+              "referencesAccepted": 2,
+              "mutationsRejected": 2,
+              "mutationsTried": 2
+            }
+          }
+        ],
+        "promotionRule": "two-distinct-inputs/deterministic/calibrated-witness"
+      },
+      "history": [
+        {
+          "state": "hypothesised",
+          "at": "2026-11-05T23:56:15.890Z",
+          "by": {
+            "kind": "operator",
+            "id": "test"
+          }
+        },
+        {
+          "state": "established",
+          "at": "2026-11-05T23:56:15.890Z",
+          "by": {
+            "kind": "engine",
+            "id": "context-cortex"
+          }
+        }
+      ]
+    },
+    {
+      "schema": "context-cortex/affordance-claim/v0",
+      "id": "gzip.compress:produces:stdout",
+      "operation": "gzip.compress",
+      "subjectPins": [
+        {
+          "path": "/usr/bin/gzip",
+          "digest": "sha256:80c36b28a931410775eb7428b82b8116303b5f178efcc6a89d59454630295794"
+        }
+      ],
+      "kind": "effect",
+      "statement": {
+        "text": "gzip.compress produces application/gzip as stdout",
+        "property": "output.stdout.format",
+        "value": "application/gzip"
+      },
+      "state": "established",
+      "source": "experiment",
+      "evidence": {
+        "supporting": [
+          {
+            "trial": "trial-12",
+            "digest": "sha256:dd2adac38d39b09f01553085494543b2e42457e59da79e5cee8055960475cd0d"
+          },
+          {
+            "trial": "trial-13",
+            "digest": "sha256:fe485c5c6f49e8fe84bb01641d482af57bf7339e8047bd181a0d65382df49f46"
+          },
+          {
+            "trial": "trial-14",
+            "digest": "sha256:65167b2db0c8a78989f5dc01b54a1afc49d7c876fc1a5d00e0fd2506d4b25a3a"
+          },
+          {
+            "trial": "trial-40",
+            "digest": "sha256:6d7c404166b82a92e7cfb91a0d5b09205fd7768466b90966587455f677769d1d"
+          },
+          {
+            "trial": "trial-41",
+            "digest": "sha256:942f5c205323b2d460ef047c859263b578a2da66b813b20e87065dd2061f35de"
+          }
+        ],
+        "refuting": [],
+        "witnesses": [
+          {
+            "id": "builtin:format-detector",
+            "origin": "built-in",
+            "digest": "sha256:1ef775ea47b81108bb14d8c1a2b976fb257226a426f3562b2dd764f5c0993ff8",
+            "calibration": {
+              "status": "calibrated",
+              "referencesAccepted": 2,
+              "mutationsRejected": 2,
+              "mutationsTried": 2
+            }
+          }
+        ],
+        "promotionRule": "two-distinct-inputs/deterministic/calibrated-witness"
+      },
+      "history": [
+        {
+          "state": "hypothesised",
+          "at": "2026-11-05T23:56:15.890Z",
+          "by": {
+            "kind": "operator",
+            "id": "test"
+          }
+        },
+        {
+          "state": "established",
+          "at": "2026-11-05T23:56:15.890Z",
+          "by": {
+            "kind": "engine",
+            "id": "context-cortex"
+          }
+        }
+      ]
+    },
+    {
+      "schema": "context-cortex/affordance-claim/v0",
+      "id": "gzip.decompress:accepts:data",
+      "operation": "gzip.decompress",
+      "subjectPins": [
+        {
+          "path": "/usr/bin/gzip",
+          "digest": "sha256:80c36b28a931410775eb7428b82b8116303b5f178efcc6a89d59454630295794"
+        }
+      ],
+      "kind": "precondition",
+      "statement": {
+        "text": "gzip.decompress accepts application/gzip as data",
+        "property": "input.data.format",
+        "value": "application/gzip"
+      },
+      "state": "established",
+      "source": "experiment",
+      "evidence": {
+        "supporting": [
+          {
+            "trial": "trial-16",
+            "digest": "sha256:296da528d4096807deea920a32916f80c19f551a8edcf24af724d217959c3a1a"
+          },
+          {
+            "trial": "trial-17",
+            "digest": "sha256:ff398cbd90d7aecb1ffb057e1dfb91bd1fd445b1126bb8966e8b48dfb115a844"
+          },
+          {
+            "trial": "trial-18",
+            "digest": "sha256:ee846e31daf94a162bf42f0f31a6b81c82e5e566ed7f539543d5a4a0dbf209da"
+          }
+        ],
+        "refuting": [],
+        "witnesses": [
+          {
+            "id": "builtin:format-detector",
+            "origin": "built-in",
+            "digest": "sha256:1ef775ea47b81108bb14d8c1a2b976fb257226a426f3562b2dd764f5c0993ff8",
+            "calibration": {
+              "status": "calibrated",
+              "referencesAccepted": 2,
+              "mutationsRejected": 2,
+              "mutationsTried": 2
+            }
+          }
+        ],
+        "promotionRule": "two-distinct-inputs/deterministic/calibrated-witness"
+      },
+      "history": [
+        {
+          "state": "hypothesised",
+          "at": "2026-11-05T23:56:15.972Z",
+          "by": {
+            "kind": "operator",
+            "id": "test"
+          }
+        },
+        {
+          "state": "established",
+          "at": "2026-11-05T23:56:15.973Z",
+          "by": {
+            "kind": "engine",
+            "id": "context-cortex"
+          }
+        }
+      ]
+    },
+    {
+      "schema": "context-cortex/affordance-claim/v0",
+      "id": "gzip.decompress:produces:stdout",
+      "operation": "gzip.decompress",
+      "subjectPins": [
+        {
+          "path": "/usr/bin/gzip",
+          "digest": "sha256:80c36b28a931410775eb7428b82b8116303b5f178efcc6a89d59454630295794"
+        }
+      ],
+      "kind": "effect",
+      "statement": {
+        "text": "gzip.decompress produces text/plain as stdout",
+        "property": "output.stdout.format",
+        "value": "text/plain"
+      },
+      "state": "established",
+      "source": "experiment",
+      "evidence": {
+        "supporting": [
+          {
+            "trial": "trial-16",
+            "digest": "sha256:296da528d4096807deea920a32916f80c19f551a8edcf24af724d217959c3a1a"
+          },
+          {
+            "trial": "trial-17",
+            "digest": "sha256:ff398cbd90d7aecb1ffb057e1dfb91bd1fd445b1126bb8966e8b48dfb115a844"
+          },
+          {
+            "trial": "trial-18",
+            "digest": "sha256:ee846e31daf94a162bf42f0f31a6b81c82e5e566ed7f539543d5a4a0dbf209da"
+          }
+        ],
+        "refuting": [],
+        "witnesses": [
+          {
+            "id": "builtin:format-detector",
+            "origin": "built-in",
+            "digest": "sha256:1ef775ea47b81108bb14d8c1a2b976fb257226a426f3562b2dd764f5c0993ff8",
+            "calibration": {
+              "status": "calibrated",
+              "referencesAccepted": 2,
+              "mutationsRejected": 2,
+              "mutationsTried": 2
+            }
+          }
+        ],
+        "promotionRule": "two-distinct-inputs/deterministic/calibrated-witness"
+      },
+      "history": [
+        {
+          "state": "hypothesised",
+          "at": "2026-11-05T23:56:15.973Z",
+          "by": {
+            "kind": "operator",
+            "id": "test"
+          }
+        },
+        {
+          "state": "established",
+          "at": "2026-11-05T23:56:15.973Z",
+          "by": {
+            "kind": "engine",
+            "id": "context-cortex"
+          }
+        }
+      ]
+    },
+    {
+      "schema": "context-cortex/affordance-claim/v0",
+      "id": "gzip.decompress:rejects:truncate",
+      "operation": "gzip.decompress",
+      "subjectPins": [
+        {
+          "path": "/usr/bin/gzip",
+          "digest": "sha256:80c36b28a931410775eb7428b82b8116303b5f178efcc6a89d59454630295794"
+        }
+      ],
+      "kind": "failure",
+      "statement": {
+        "text": "gzip.decompress refuses input damaged by truncate",
+        "property": "input.damage.truncate",
+        "value": "refused"
+      },
+      "state": "established",
+      "source": "experiment",
+      "evidence": {
+        "supporting": [
+          {
+            "trial": "trial-19",
+            "digest": "sha256:1fce724cd8894ee4eb4e95dda3c54c61e5087b169b6841277ca2d3277ad8f70e"
+          },
+          {
+            "trial": "trial-21",
+            "digest": "sha256:6ef3ffbb93c2dc480f29ebc7a3acbe3012f272946948ca6e4463267366785a9a"
+          }
+        ],
+        "refuting": [],
+        "promotionRule": "failure/two-distinct-controls"
+      },
+      "history": [
+        {
+          "state": "hypothesised",
+          "at": "2026-11-05T23:56:15.973Z",
+          "by": {
+            "kind": "operator",
+            "id": "test"
+          }
+        },
+        {
+          "state": "established",
+          "at": "2026-11-05T23:56:15.973Z",
+          "by": {
+            "kind": "engine",
+            "id": "context-cortex"
+          }
+        }
+      ]
+    },
+    {
+      "schema": "context-cortex/affordance-claim/v0",
+      "id": "gzip.decompress:rejects:corrupt-header",
+      "operation": "gzip.decompress",
+      "subjectPins": [
+        {
+          "path": "/usr/bin/gzip",
+          "digest": "sha256:80c36b28a931410775eb7428b82b8116303b5f178efcc6a89d59454630295794"
+        }
+      ],
+      "kind": "failure",
+      "statement": {
+        "text": "gzip.decompress refuses input damaged by corrupt-header",
+        "property": "input.damage.corrupt-header",
+        "value": "refused"
+      },
+      "state": "established",
+      "source": "experiment",
+      "evidence": {
+        "supporting": [
+          {
+            "trial": "trial-20",
+            "digest": "sha256:3e8b105675a7b865950531e726d5c81b3ad03032042f3e88010c46853182f8bd"
+          },
+          {
+            "trial": "trial-22",
+            "digest": "sha256:ae159462347c1e4dfda2852db92b43ce656da2873eb2fe494dd8c852885afffb"
+          }
+        ],
+        "refuting": [],
+        "promotionRule": "failure/two-distinct-controls"
+      },
+      "history": [
+        {
+          "state": "hypothesised",
+          "at": "2026-11-05T23:56:15.973Z",
+          "by": {
+            "kind": "operator",
+            "id": "test"
+          }
+        },
+        {
+          "state": "established",
+          "at": "2026-11-05T23:56:15.973Z",
+          "by": {
+            "kind": "engine",
+            "id": "context-cortex"
+          }
+        }
+      ]
+    },
+    {
+      "schema": "context-cortex/affordance-claim/v0",
+      "id": "gzip.compress:lossless",
+      "operation": "gzip.compress",
+      "subjectPins": [
+        {
+          "path": "/usr/bin/gzip",
+          "digest": "sha256:80c36b28a931410775eb7428b82b8116303b5f178efcc6a89d59454630295794"
+        }
+      ],
+      "kind": "preservation",
+      "statement": {
+        "text": "decompressing the output returns the input exactly",
+        "property": "bytes",
+        "value": "exact"
+      },
+      "state": "established",
+      "source": "model-hypothesis",
+      "evidence": {
+        "supporting": [
+          {
+            "trial": "witness-44",
+            "digest": "sha256:0bdefa5962f182f2f2dd23c7df55f326c7a5498a26d346b0f7b3c3c1e2b3a50c"
+          },
+          {
+            "trial": "witness-46",
+            "digest": "sha256:64dfbb199abfa79cf65b5e055d7b5e42b947339aa6b15611e7075257d352c06a"
+          }
+        ],
+        "refuting": [],
+        "witnesses": [
+          {
+            "id": "gzip-roundtrip",
+            "origin": "model-authored",
+            "digest": "sha256:26aaa56feb8739e70221972a2507b9a3f707710cd7f8804c81a187dc7e91d655",
+            "calibration": {
+              "status": "calibrated",
+              "referencesAccepted": 2,
+              "mutationsRejected": 6,
+              "mutationsTried": 6
+            }
+          }
+        ],
+        "promotionRule": "two-distinct-inputs/deterministic/calibrated-witness"
+      },
+      "history": [
+        {
+          "state": "hypothesised",
+          "at": "2026-11-05T23:56:16.104Z",
+          "by": {
+            "kind": "operator",
+            "id": "test"
+          }
+        },
+        {
+          "state": "established",
+          "at": "2026-11-05T23:56:16.104Z",
+          "by": {
+            "kind": "engine",
+            "id": "context-cortex"
+          }
+        }
+      ]
+    }
+  ],
+  "artefacts": [
+    {
+      "id": "sha256:37b6523febbd831925252032539d86b5df4e9386edb40c52ade901f600ab1fe2",
+      "digest": "sha256:37b6523febbd831925252032539d86b5df4e9386edb40c52ade901f600ab1fe2",
+      "origin": "operator-supplied",
+      "role": "fixture",
+      "mediaType": "text/plain",
+      "data": "aGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgKaGVsbG8gY29udGV4dCBjb3J0ZXgK"
+    },
+    {
+      "id": "sha256:5863163dc4136e9c7e38a432a8bdd4e4bd0355ef5a5322af3eb2f39edf2d7dbe",
+      "digest": "sha256:5863163dc4136e9c7e38a432a8bdd4e4bd0355ef5a5322af3eb2f39edf2d7dbe",
+      "origin": "operator-supplied",
+      "role": "fixture",
+      "mediaType": "text/plain",
+      "data": "dGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZwp0aGUgcXVpY2sgYnJvd24gZm94IGp1bXBzIG92ZXIgdGhlIGxhenkgZG9nCnRoZSBxdWljayBicm93biBmb3gganVtcHMgb3ZlciB0aGUgbGF6eSBkb2cKdGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZwp0aGUgcXVpY2sgYnJvd24gZm94IGp1bXBzIG92ZXIgdGhlIGxhenkgZG9nCnRoZSBxdWljayBicm93biBmb3gganVtcHMgb3ZlciB0aGUgbGF6eSBkb2cKdGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZwp0aGUgcXVpY2sgYnJvd24gZm94IGp1bXBzIG92ZXIgdGhlIGxhenkgZG9nCnRoZSBxdWljayBicm93biBmb3gganVtcHMgb3ZlciB0aGUgbGF6eSBkb2cKdGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZwp0aGUgcXVpY2sgYnJvd24gZm94IGp1bXBzIG92ZXIgdGhlIGxhenkgZG9nCnRoZSBxdWljayBicm93biBmb3gganVtcHMgb3ZlciB0aGUgbGF6eSBkb2cKdGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZwp0aGUgcXVpY2sgYnJvd24gZm94IGp1bXBzIG92ZXIgdGhlIGxhenkgZG9nCnRoZSBxdWljayBicm93biBmb3gganVtcHMgb3ZlciB0aGUgbGF6eSBkb2cKdGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZwp0aGUgcXVpY2sgYnJvd24gZm94IGp1bXBzIG92ZXIgdGhlIGxhenkgZG9nCnRoZSBxdWljayBicm93biBmb3gganVtcHMgb3ZlciB0aGUgbGF6eSBkb2cKdGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZwp0aGUgcXVpY2sgYnJvd24gZm94IGp1bXBzIG92ZXIgdGhlIGxhenkgZG9nCnRoZSBxdWljayBicm93biBmb3gganVtcHMgb3ZlciB0aGUgbGF6eSBkb2cKdGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZwp0aGUgcXVpY2sgYnJvd24gZm94IGp1bXBzIG92ZXIgdGhlIGxhenkgZG9nCnRoZSBxdWljayBicm93biBmb3gganVtcHMgb3ZlciB0aGUgbGF6eSBkb2cKdGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZwp0aGUgcXVpY2sgYnJvd24gZm94IGp1bXBzIG92ZXIgdGhlIGxhenkgZG9nCnRoZSBxdWljayBicm93biBmb3gganVtcHMgb3ZlciB0aGUgbGF6eSBkb2cKdGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZwp0aGUgcXVpY2sgYnJvd24gZm94IGp1bXBzIG92ZXIgdGhlIGxhenkgZG9nCnRoZSBxdWljayBicm93biBmb3gganVtcHMgb3ZlciB0aGUgbGF6eSBkb2cK"
+    },
+    {
+      "id": "sha256:404e8f6684e7b3ec413e8bbb0c3d2100000717e7d301827836525145945a152c",
+      "digest": "sha256:404e8f6684e7b3ec413e8bbb0c3d2100000717e7d301827836525145945a152c",
+      "origin": "model-authored",
+      "role": "fixture",
+      "mediaType": "text/plain",
+      "data": "aW5saW5lCg=="
+    },
+    {
+      "id": "sha256:7b9bb2399d34922e73da7ecf0f94b9c5550ae627df251ad36024d407bde9d17f",
+      "digest": "sha256:7b9bb2399d34922e73da7ecf0f94b9c5550ae627df251ad36024d407bde9d17f",
+      "origin": "program-output",
+      "role": "fixture",
+      "mediaType": "application/gzip",
+      "data": "H4sIAAAAAAAAA8tIzcnJV0jOzytJrSgB0kVAmitjVHAwCQIAcVGrN6QBAAA="
+    },
+    {
+      "id": "sha256:89c84ea48dd5eb7a6d61f7abb082cf321a7fc482a5f7c811c52f75918c2c29a7",
+      "digest": "sha256:89c84ea48dd5eb7a6d61f7abb082cf321a7fc482a5f7c811c52f75918c2c29a7",
+      "origin": "program-output",
+      "role": "fixture",
+      "mediaType": "application/gzip",
+      "data": "H4sIAAAAAAAAAyvJSFUoLM1MzlZIKsovz1NIy69QyCrNLShWyC9LLVIoAUrnJFZVKqTkp3OVjKodVTuqdlTtCFQLANw8DCEoBQAA"
+    },
+    {
+      "id": "sha256:e0ca5ce07255762df54b5d8062d8f488b9754cbc95f77413a0cbaf7f60e054cd",
+      "digest": "sha256:e0ca5ce07255762df54b5d8062d8f488b9754cbc95f77413a0cbaf7f60e054cd",
+      "origin": "program-output",
+      "role": "fixture",
+      "mediaType": "application/gzip",
+      "data": "H4sIAAAAAAAAA8vMy8nMS+UCAHEKRhEHAAAA"
+    },
+    {
+      "id": "sha256:02a3e298f1533f62558c58e4c70edcab9af5a50d62d925fd5390942020fb0fb8",
+      "digest": "sha256:02a3e298f1533f62558c58e4c70edcab9af5a50d62d925fd5390942020fb0fb8",
+      "origin": "model-authored",
+      "role": "fixture",
+      "mediaType": "image/png",
+      "data": "iVBORw0KGgoAAAANSUhEUg=="
+    }
+  ],
+  "evidence": [
+    {
+      "trial": "trial-12",
+      "digest": "sha256:dd2adac38d39b09f01553085494543b2e42457e59da79e5cee8055960475cd0d"
+    },
+    {
+      "trial": "trial-13",
+      "digest": "sha256:fe485c5c6f49e8fe84bb01641d482af57bf7339e8047bd181a0d65382df49f46"
+    },
+    {
+      "trial": "trial-14",
+      "digest": "sha256:65167b2db0c8a78989f5dc01b54a1afc49d7c876fc1a5d00e0fd2506d4b25a3a"
+    },
+    {
+      "trial": "trial-16",
+      "digest": "sha256:296da528d4096807deea920a32916f80c19f551a8edcf24af724d217959c3a1a"
+    },
+    {
+      "trial": "trial-17",
+      "digest": "sha256:ff398cbd90d7aecb1ffb057e1dfb91bd1fd445b1126bb8966e8b48dfb115a844"
+    },
+    {
+      "trial": "trial-18",
+      "digest": "sha256:ee846e31daf94a162bf42f0f31a6b81c82e5e566ed7f539543d5a4a0dbf209da"
+    },
+    {
+      "trial": "trial-19",
+      "digest": "sha256:1fce724cd8894ee4eb4e95dda3c54c61e5087b169b6841277ca2d3277ad8f70e"
+    },
+    {
+      "trial": "trial-20",
+      "digest": "sha256:3e8b105675a7b865950531e726d5c81b3ad03032042f3e88010c46853182f8bd"
+    },
+    {
+      "trial": "trial-21",
+      "digest": "sha256:6ef3ffbb93c2dc480f29ebc7a3acbe3012f272946948ca6e4463267366785a9a"
+    },
+    {
+      "trial": "trial-22",
+      "digest": "sha256:ae159462347c1e4dfda2852db92b43ce656da2873eb2fe494dd8c852885afffb"
+    },
+    {
+      "trial": "trial-40",
+      "digest": "sha256:6d7c404166b82a92e7cfb91a0d5b09205fd7768466b90966587455f677769d1d"
+    },
+    {
+      "trial": "trial-41",
+      "digest": "sha256:942f5c205323b2d460ef047c859263b578a2da66b813b20e87065dd2061f35de"
+    }
+  ],
+  "carriesAuthority": false,
+  "importPolicy": {
+    "requireRevalidation": true,
+    "initialStatus": "imported-unvalidated"
+  },
+  "notes": "Exported from a real run of the gzip learning loop (test/helpers.js learnGzip) on darwin-arm64. Program digests are those of this host's gzip; importing it elsewhere re-runs every experiment there."
+}

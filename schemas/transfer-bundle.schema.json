@@ -1,37 +1,85 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/rossbuckley1990-hash/context-cortex/schemas/transfer-bundle.schema.json",
-  "title": "Transfer bundle, draft 0",
-  "description": "Skills, the claims they depend on and evidence digests, exported for another model or environment. Import always revalidates; a bundle never carries authority. See docs/ARCHITECTURE.md section 6.",
+  "title": "Transfer bundle, v0",
+  "description": "Skills and everything needed to re-establish them elsewhere: operations, experiments, witness calibrations, claims and sample bytes. Import always revalidates; a bundle never carries authority. See docs/ARCHITECTURE.md section 6.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "exportedAt", "exportedBy", "sourceEnvironment", "skills", "claims", "artefacts", "carriesAuthority", "importPolicy"],
+  "required": ["schema", "exportedAt", "exportedBy", "sourceEnvironment", "skills", "operations", "experiments", "witnesses", "claims", "artefacts", "carriesAuthority", "importPolicy"],
   "properties": {
     "schema": { "const": "context-cortex/transfer-bundle/v0" },
     "exportedAt": { "type": "string", "format": "date-time" },
     "exportedBy": { "$ref": "common.schema.json#/$defs/actor" },
     "sourceEnvironment": { "$ref": "common.schema.json#/$defs/environment" },
     "skills": { "type": "array", "minItems": 1, "items": { "$ref": "skill.schema.json" } },
-    "claims": { "type": "array", "items": { "$ref": "affordance-claim.schema.json" } },
-    "artefacts": {
-      "description": "Witnesses, adapters, generators and fixtures, each pinned by digest and labelled with its origin.",
+    "operations": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "digest", "origin", "role", "path"],
+        "required": ["id", "program", "args", "inputs", "outputs", "pin"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/operationRef" },
+          "program": { "type": "string", "minLength": 1 },
+          "args": { "type": "array", "items": { "type": "string" } },
+          "inputs": { "type": "object", "additionalProperties": { "type": "string" } },
+          "outputs": { "type": "object", "additionalProperties": { "type": "string" } },
+          "stdin": { "type": "string" },
+          "description": { "type": "string" },
+          "pin": { "$ref": "common.schema.json#/$defs/programPin" }
+        }
+      }
+    },
+    "experiments": {
+      "description": "The experiments behind the claims, re-run on import.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "operation", "spec"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/digest" },
+          "operation": { "$ref": "common.schema.json#/$defs/operationRef" },
+          "spec": { "type": "object" }
+        }
+      }
+    },
+    "witnesses": {
+      "description": "Witness definitions and how they were calibrated; recalibrated on import.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "origin", "definition", "calibrationSpec", "calibration"],
+        "properties": {
+          "id": { "type": "string" },
+          "origin": { "$ref": "common.schema.json#/$defs/origin" },
+          "definition": { "type": "object" },
+          "calibrationSpec": { "type": "object" },
+          "calibration": { "type": "object" }
+        }
+      }
+    },
+    "claims": { "type": "array", "items": { "$ref": "affordance-claim.schema.json" } },
+    "artefacts": {
+      "description": "Sample and fixture bytes, each named by its digest and checked against it on import.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "digest", "origin", "role", "data"],
         "properties": {
           "id": { "type": "string" },
           "digest": { "$ref": "common.schema.json#/$defs/digest" },
           "origin": { "$ref": "common.schema.json#/$defs/origin" },
           "role": { "enum": ["witness", "adapter", "generator", "fixture"] },
           "mediaType": { "type": "string" },
-          "path": { "description": "Location inside the bundle.", "type": "string" }
+          "data": { "description": "The bytes, base64.", "type": "string", "contentEncoding": "base64" }
         }
       }
     },
     "evidence": {
-      "description": "Ledger entries by digest. Raw trial data is optional and stays outside the bundle by default.",
+      "description": "Ledger entries of the source host, by digest. They are a record, not proof: import re-runs the experiments.",
       "type": "array",
       "items": { "$ref": "common.schema.json#/$defs/ledgerRef" }
     },

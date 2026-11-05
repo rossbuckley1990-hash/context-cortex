@@ -1,17 +1,32 @@
 {
   "name": "context-cortex",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "A self-expanding capability layer for AI, built on RightClick X's context tools. Research phase.",
+  "description": "A capability layer for AI: experiments on local programs become checked, transferable skills. MCP server and CLI.",
   "type": "module",
+  "bin": {
+    "cortex": "bin/cortex.js"
+  },
+  "exports": {
+    ".": "./src/cortex.js",
+    "./mcp": "./src/mcp.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "schemas",
+    "README.md"
+  ],
   "engines": {
     "node": ">=22.18"
   },
   "scripts": {
+    "test": "node --test test/ && node scripts/check-schemas.mjs",
     "check": "node scripts/check-schemas.mjs",
-    "test": "node scripts/check-schemas.mjs"
+    "mcp": "node bin/cortex.js mcp",
+    "example": "node scripts/make-example.mjs"
   },
-  "devDependencies": {
+  "dependencies": {
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1"
   }

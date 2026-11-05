@@ -1,15 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/rossbuckley1990-hash/context-cortex/schemas/affordance-claim.schema.json",
-  "title": "Affordance claim, draft 0",
-  "description": "One checkable statement about a capability, with the evidence that decided its state. See docs/ARCHITECTURE.md section 3.",
+  "title": "Affordance claim, v0",
+  "description": "One checkable statement about an operation, with the evidence that decided its state. See docs/ARCHITECTURE.md section 3.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "id", "capability", "kind", "statement", "state", "source", "evidence", "history"],
+  "required": ["schema", "id", "operation", "kind", "statement", "state", "source", "evidence", "history"],
   "properties": {
     "schema": { "const": "context-cortex/affordance-claim/v0" },
     "id": { "type": "string", "minLength": 1 },
-    "capability": { "$ref": "common.schema.json#/$defs/capabilityRef" },
+    "operation": { "$ref": "common.schema.json#/$defs/operationRef" },
     "subjectPins": {
       "description": "The programs the claim is about. A changed pin makes the claim stale.",
       "type": "array",
@@ -24,7 +24,7 @@
       "required": ["text", "property"],
       "properties": {
         "text": { "description": "The claim in one sentence.", "type": "string", "minLength": 1 },
-        "property": { "description": "What the claim is about, for example pixels, exit-status, writes, input.format.", "type": "string", "minLength": 1 },
+        "property": { "description": "What the claim is about, for example bytes, pixels, input.data.format, input.damage.truncate.", "type": "string", "minLength": 1 },
         "value": { "description": "The claimed value, when there is one." },
         "conditions": {
           "description": "Under which conditions the claim holds, for example a flag or an input class.",
@@ -32,9 +32,9 @@
           "items": { "type": "string" }
         },
         "effectClass": { "$ref": "common.schema.json#/$defs/effectClass" },
-        "relatedCapability": {
-          "description": "For composability and substitute claims: the other capability.",
-          "$ref": "common.schema.json#/$defs/capabilityRef"
+        "relatedOperation": {
+          "description": "For composability and substitute claims: the other operation.",
+          "$ref": "common.schema.json#/$defs/operationRef"
         }
       }
     },
@@ -78,17 +78,20 @@
       "then": {
         "properties": {
           "evidence": {
-            "required": ["promotionRule", "witnesses"],
+            "required": ["promotionRule"],
             "properties": {
               "supporting": { "minItems": 2 },
               "witnesses": {
-                "minItems": 1,
                 "items": { "properties": { "calibration": { "properties": { "status": { "const": "calibrated" } } } } }
               }
             }
           }
         }
       }
+    },
+    {
+      "if": { "properties": { "state": { "const": "established" }, "kind": { "const": "preservation" } } },
+      "then": { "properties": { "evidence": { "required": ["witnesses"], "properties": { "witnesses": { "minItems": 1 } } } } }
     },
     {
       "if": { "properties": { "state": { "const": "observed" } } },

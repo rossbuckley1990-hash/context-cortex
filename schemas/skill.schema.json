@@ -1,16 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/rossbuckley1990-hash/context-cortex/schemas/skill.schema.json",
-  "title": "Skill, draft 0",
+  "title": "Skill, v0",
   "description": "A crystallised, executable workflow that a different model can inherit. See docs/ARCHITECTURE.md section 6.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "id", "revision", "title", "objective", "goal", "steps", "prerequisites", "successConditions", "limitations", "provenance", "selfTest", "status"],
+  "required": ["schema", "id", "revision", "title", "objective", "goal", "steps", "prerequisites", "successConditions", "limitations", "provenance", "selfTest", "definition", "status"],
   "properties": {
     "schema": { "const": "context-cortex/skill/v0" },
     "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
     "revision": {
-      "description": "Digest of the skill's canonical content, excluding status and revision.",
+      "description": "Digest of the skill's canonical content, excluding status, revision and provenance.",
       "$ref": "common.schema.json#/$defs/digest"
     },
     "title": { "type": "string", "minLength": 1 },
@@ -23,7 +23,7 @@
         "have": { "type": "array", "minItems": 1, "items": { "type": "string" } },
         "want": { "type": "array", "minItems": 1, "items": { "type": "string" } },
         "preserve": {
-          "description": "Hard requirements, for example pixels. A route that cannot prove them is refused.",
+          "description": "Hard requirements, for example bytes or pixels. A skill that cannot show them is not established.",
           "type": "array",
           "items": { "type": "string" }
         }
@@ -35,13 +35,12 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "capability", "bind"],
+        "required": ["id", "operation", "bind"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-          "capability": { "$ref": "common.schema.json#/$defs/capabilityRef" },
-          "options": { "description": "Options pinned at crystallisation.", "type": "object" },
+          "operation": { "$ref": "common.schema.json#/$defs/operationRef" },
           "bind": {
-            "description": "Port name to source: input.<name> or steps.<id>.<port>.",
+            "description": "Operation input to source: input.<name> or steps.<id>.<output>.",
             "type": "object",
             "additionalProperties": { "type": "string", "pattern": "^(input\\.[A-Za-z0-9_-]+|steps\\.[a-z0-9-]+\\.[A-Za-z0-9_-]+)$" }
           }
@@ -82,7 +81,8 @@
         "properties": {
           "witness": { "description": "Id of a calibrated witness.", "type": "string" },
           "check": { "type": "string", "minLength": 1 },
-          "on": { "description": "The output port checked, for example steps.encode.output.", "type": "string" }
+          "on": { "description": "The output checked, for example steps.compress.stdout.", "type": "string" },
+          "property": { "description": "The preserved property this condition checks end to end.", "type": "string" }
         }
       }
     },
@@ -103,13 +103,12 @@
     "provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["acquiredBy", "acquiredAt", "receipts"],
+      "required": ["acquiredBy", "acquiredAt", "demonstrations"],
       "properties": {
         "acquiredBy": { "$ref": "common.schema.json#/$defs/actor" },
         "acquiredAt": { "type": "string", "format": "date-time" },
-        "receipts": { "description": "RightClick X receipt ids of the demonstrating runs.", "type": "array", "minItems": 1, "items": { "type": "string" } },
-        "ledger": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/ledgerRef" } },
-        "environment": { "$ref": "common.schema.json#/$defs/environment" }
+        "demonstrations": { "description": "Ledger entries of the self-test runs.", "type": "array", "items": { "$ref": "common.schema.json#/$defs/ledgerRef" } },
+        "operations": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/operationRef" } }
       }
     },
     "selfTest": {
@@ -135,9 +134,13 @@
         }
       }
     },
+    "definition": { "description": "The normalised definition the skill was crystallised from; revalidation crystallises it again.", "type": "object" },
     "status": {
       "enum": ["draft", "established", "imported-unvalidated", "revalidated", "contradicted-here", "retired"]
     },
+    "importedFrom": { "$ref": "common.schema.json#/$defs/digest" },
     "notes": { "type": "string" }
-  }
+  },
+  "if": { "properties": { "status": { "enum": ["established", "revalidated"] } } },
+  "then": { "properties": { "provenance": { "properties": { "demonstrations": { "minItems": 1 } } } } }
 }

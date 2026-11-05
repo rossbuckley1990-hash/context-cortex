@@ -8,75 +8,167 @@
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
-    "capabilityRef": {
-      "description": "A RightClick X capability id, for example cli:cwebp:png-to-webp or goal:destination-brief.",
-      "type": "string",
-      "minLength": 1
-    },
     "claimState": {
       "description": "Decided only by the engine from ledger evidence. Planning uses established claims only.",
-      "enum": ["hypothesised", "observed", "established", "contradicted", "stale"]
+      "enum": [
+        "hypothesised",
+        "observed",
+        "established",
+        "contradicted",
+        "stale"
+      ]
     },
     "effectClass": {
       "description": "What running a capability can change. 'unknown' is planned as 'destructive' and runs only in the sandbox.",
-      "enum": ["none", "sandbox-write", "host-read", "host-write", "network", "destructive", "unknown"]
+      "enum": [
+        "none",
+        "sandbox-write",
+        "host-read",
+        "host-write",
+        "network",
+        "destructive",
+        "unknown"
+      ]
     },
     "origin": {
-      "description": "Who supplied an artefact or witness. Assurance labels name it. 'acquired' is a capability whose own exactness is established, used as a witness (a decoder witnessing an encoder).",
-      "enum": ["built-in", "acquired", "model-authored", "operator-supplied", "imported"]
+      "description": "Who supplied an artefact or witness. Assurance labels name it. 'acquired' is an operation whose own claims are established, used inside a witness (a decoder witnessing an encoder).",
+      "enum": [
+        "built-in",
+        "acquired",
+        "model-authored",
+        "operator-supplied",
+        "program-output",
+        "engine-generated",
+        "imported"
+      ]
     },
     "actor": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "id"],
+      "required": [
+        "kind",
+        "id"
+      ],
       "properties": {
-        "kind": { "enum": ["model", "engine", "operator", "evaluator"] },
-        "id": { "type": "string", "minLength": 1 },
-        "model": { "description": "Model id, when kind is model.", "type": "string" },
-        "session": { "type": "string" }
+        "kind": {
+          "enum": [
+            "model",
+            "engine",
+            "operator",
+            "evaluator"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "description": "Model id, when kind is model.",
+          "type": "string"
+        },
+        "session": {
+          "type": "string"
+        }
       }
     },
     "programPin": {
       "description": "A program identity. A changed digest makes every claim about the program stale.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "digest"],
+      "required": [
+        "path",
+        "digest"
+      ],
       "properties": {
-        "path": { "type": "string", "minLength": 1 },
-        "digest": { "$ref": "#/$defs/digest" },
-        "version": { "type": "string" },
-        "package": { "type": "string" }
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "version": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        }
       }
     },
     "ledgerRef": {
       "description": "One trial in the append-only evidence ledger.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["trial", "digest"],
+      "required": [
+        "trial",
+        "digest"
+      ],
       "properties": {
-        "trial": { "type": "string", "minLength": 1 },
-        "digest": { "$ref": "#/$defs/digest" }
+        "trial": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        }
       }
     },
     "witnessRef": {
       "description": "A validator or decoder whose verdicts count only once it is calibrated.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "origin", "digest", "calibration"],
+      "required": [
+        "id",
+        "origin",
+        "digest",
+        "calibration"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "origin": { "$ref": "#/$defs/origin" },
-        "digest": { "$ref": "#/$defs/digest" },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "origin": {
+          "$ref": "#/$defs/origin"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
         "calibration": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["status", "referencesAccepted", "mutationsRejected", "mutationsTried"],
+          "required": [
+            "status",
+            "referencesAccepted",
+            "mutationsRejected",
+            "mutationsTried"
+          ],
           "properties": {
-            "status": { "enum": ["calibrated", "uncalibrated", "failed"] },
-            "referencesAccepted": { "type": "integer", "minimum": 0 },
-            "mutationsRejected": { "type": "integer", "minimum": 0 },
-            "mutationsTried": { "type": "integer", "minimum": 0 },
-            "trials": { "type": "array", "items": { "$ref": "#/$defs/ledgerRef" } }
+            "status": {
+              "enum": [
+                "calibrated",
+                "uncalibrated",
+                "failed"
+              ]
+            },
+            "referencesAccepted": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mutationsRejected": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mutationsTried": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "trials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ledgerRef"
+              }
+            }
           }
         }
       }
@@ -84,11 +176,22 @@
     "environment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["fingerprint"],
+      "required": [
+        "fingerprint"
+      ],
       "properties": {
-        "fingerprint": { "$ref": "#/$defs/digest" },
-        "description": { "type": "string" }
+        "fingerprint": {
+          "$ref": "#/$defs/digest"
+        },
+        "description": {
+          "type": "string"
+        }
       }
+    },
+    "operationRef": {
+      "description": "A Context Cortex operation id: a program plus an argument template, for example gzip.compress.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,79}$"
     }
   }
 }

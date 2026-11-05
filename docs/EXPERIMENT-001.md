@@ -40,7 +40,7 @@ All acquisition sessions in all arms use the **same model (model A)** with the s
 
 | Arm | What the agent has | Who designs experiments | What persists |
 |---|---|---|---|
-| **C** Cortex | RightClick X tools + the four Cortex tools ([ARCHITECTURE §4](ARCHITECTURE.md#4-the-tool-surface)) | the model, executed and judged by the engine | transfer bundle |
+| **C** Cortex | the six Context Cortex tools ([ARCHITECTURE §4](ARCHITECTURE.md#4-the-tool-surface)) at a frozen commit | the model, executed and judged by the engine | transfer bundle |
 | **R** RightClick X | RightClick X tools at the frozen commit | the engine's fixed investigation | runtime state + handoff note |
 | **S** Saved scripts | a shell, the granted programs, language standard libraries, a sandbox | the model, by hand | toolkit directory |
 | **N** No inheritance | as S, but reuse sessions inherit nothing | — | nothing |
