@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rossbuckley1990-hash/context-cortex/schemas/skill.schema.json",
+  "title": "Skill, draft 0",
+  "description": "A crystallised, executable workflow that a different model can inherit. See docs/ARCHITECTURE.md section 6.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "revision", "title", "objective", "goal", "steps", "prerequisites", "successConditions", "limitations", "provenance", "selfTest", "status"],
+  "properties": {
+    "schema": { "const": "context-cortex/skill/v0" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "revision": {
+      "description": "Digest of the skill's canonical content, excluding status and revision.",
+      "$ref": "common.schema.json#/$defs/digest"
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "objective": { "description": "What the skill achieves, in one sentence.", "type": "string", "minLength": 1 },
+    "goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["have", "want"],
+      "properties": {
+        "have": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "want": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "preserve": {
+          "description": "Hard requirements, for example pixels. A route that cannot prove them is refused.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "capability", "bind"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "capability": { "$ref": "common.schema.json#/$defs/capabilityRef" },
+          "options": { "description": "Options pinned at crystallisation.", "type": "object" },
+          "bind": {
+            "description": "Port name to source: input.<name> or steps.<id>.<port>.",
+            "type": "object",
+            "additionalProperties": { "type": "string", "pattern": "^(input\\.[A-Za-z0-9_-]+|steps\\.[a-z0-9-]+\\.[A-Za-z0-9_-]+)$" }
+          }
+        }
+      }
+    },
+    "prerequisites": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["programs", "claims", "authority"],
+      "properties": {
+        "programs": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/programPin" } },
+        "formats": { "type": "array", "items": { "type": "string" } },
+        "claims": {
+          "description": "Ids of the established claims the skill depends on.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "authority": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["effectClasses", "network"],
+          "properties": {
+            "effectClasses": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/effectClass" } },
+            "executables": { "type": "array", "items": { "type": "string" } },
+            "network": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "successConditions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["witness", "check", "on"],
+        "properties": {
+          "witness": { "description": "Id of a calibrated witness.", "type": "string" },
+          "check": { "type": "string", "minLength": 1 },
+          "on": { "description": "The output port checked, for example steps.encode.output.", "type": "string" }
+        }
+      }
+    },
+    "limitations": {
+      "description": "Contradicted claims and refused input classes, carried forward so the next agent does not rediscover them.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1 },
+          "claim": { "type": "string" },
+          "inputClass": { "type": "string" }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acquiredBy", "acquiredAt", "receipts"],
+      "properties": {
+        "acquiredBy": { "$ref": "common.schema.json#/$defs/actor" },
+        "acquiredAt": { "type": "string", "format": "date-time" },
+        "receipts": { "description": "RightClick X receipt ids of the demonstrating runs.", "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "ledger": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/ledgerRef" } },
+        "environment": { "$ref": "common.schema.json#/$defs/environment" }
+      }
+    },
+    "selfTest": {
+      "description": "Run before the skill is used in a new environment.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixtures"],
+      "properties": {
+        "fixtures": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "inputs", "expect"],
+            "properties": {
+              "id": { "type": "string" },
+              "inputs": { "type": "object", "additionalProperties": { "$ref": "common.schema.json#/$defs/digest" } },
+              "expect": { "enum": ["pass", "refuse"] }
+            }
+          },
+          "contains": { "properties": { "expect": { "const": "refuse" } } }
+        }
+      }
+    },
+    "status": {
+      "enum": ["draft", "established", "imported-unvalidated", "revalidated", "contradicted-here", "retired"]
+    },
+    "notes": { "type": "string" }
+  }
+}

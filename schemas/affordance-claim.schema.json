@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rossbuckley1990-hash/context-cortex/schemas/affordance-claim.schema.json",
+  "title": "Affordance claim, draft 0",
+  "description": "One checkable statement about a capability, with the evidence that decided its state. See docs/ARCHITECTURE.md section 3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "capability", "kind", "statement", "state", "source", "evidence", "history"],
+  "properties": {
+    "schema": { "const": "context-cortex/affordance-claim/v0" },
+    "id": { "type": "string", "minLength": 1 },
+    "capability": { "$ref": "common.schema.json#/$defs/capabilityRef" },
+    "subjectPins": {
+      "description": "The programs the claim is about. A changed pin makes the claim stale.",
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/programPin" }
+    },
+    "kind": {
+      "enum": ["precondition", "effect", "preservation", "authority", "failure", "composability", "substitute"]
+    },
+    "statement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "property"],
+      "properties": {
+        "text": { "description": "The claim in one sentence.", "type": "string", "minLength": 1 },
+        "property": { "description": "What the claim is about, for example pixels, exit-status, writes, input.format.", "type": "string", "minLength": 1 },
+        "value": { "description": "The claimed value, when there is one." },
+        "conditions": {
+          "description": "Under which conditions the claim holds, for example a flag or an input class.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "effectClass": { "$ref": "common.schema.json#/$defs/effectClass" },
+        "relatedCapability": {
+          "description": "For composability and substitute claims: the other capability.",
+          "$ref": "common.schema.json#/$defs/capabilityRef"
+        }
+      }
+    },
+    "state": { "$ref": "common.schema.json#/$defs/claimState" },
+    "source": {
+      "description": "Where the claim was first stated. It never decides the state.",
+      "enum": ["documentation", "model-hypothesis", "engine-rule", "experiment", "imported"]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supporting", "refuting"],
+      "properties": {
+        "supporting": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/ledgerRef" } },
+        "refuting": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/ledgerRef" } },
+        "witnesses": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/witnessRef" } },
+        "promotionRule": { "description": "The rule that established the claim.", "type": "string" }
+      }
+    },
+    "environment": { "$ref": "common.schema.json#/$defs/environment" },
+    "history": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["state", "at", "by"],
+        "properties": {
+          "state": { "$ref": "common.schema.json#/$defs/claimState" },
+          "at": { "type": "string", "format": "date-time" },
+          "by": { "$ref": "common.schema.json#/$defs/actor" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "notes": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "state": { "const": "established" } } },
+      "then": {
+        "properties": {
+          "evidence": {
+            "required": ["promotionRule", "witnesses"],
+            "properties": {
+              "supporting": { "minItems": 2 },
+              "witnesses": {
+                "minItems": 1,
+                "items": { "properties": { "calibration": { "properties": { "status": { "const": "calibrated" } } } } }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "state": { "const": "observed" } } },
+      "then": { "properties": { "evidence": { "properties": { "supporting": { "minItems": 1 } } } } }
+    },
+    {
+      "if": { "properties": { "state": { "const": "contradicted" } } },
+      "then": { "properties": { "evidence": { "properties": { "refuting": { "minItems": 1 } } } } }
+    }
+  ]
+}

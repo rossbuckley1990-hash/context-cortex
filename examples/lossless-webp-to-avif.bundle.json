@@ -1,0 +1,159 @@
+{
+  "schema": "context-cortex/transfer-bundle/v0",
+  "notes": "Illustrative example modelled on RightClick X PR #61's lossless AVIF demonstration. Capability ids are illustrative and every digest is a placeholder. This is not evidence.",
+  "exportedAt": "2026-11-05T12:00:00Z",
+  "exportedBy": { "kind": "engine", "id": "context-cortex" },
+  "sourceEnvironment": {
+    "fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "description": "E1: pinned container image with libwebp and libavif"
+  },
+  "skills": [
+    {
+      "schema": "context-cortex/skill/v0",
+      "id": "lossless-webp-to-avif",
+      "revision": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "title": "WebP to AVIF without changing decoded pixels",
+      "objective": "Convert a WebP image to AVIF so that the AVIF decodes to exactly the pixels the WebP decodes to.",
+      "goal": { "have": ["bytes:image/webp"], "want": ["bytes:image/avif"], "preserve": ["pixels"] },
+      "steps": [
+        { "id": "decode", "capability": "cli:dwebp:webp-to-png", "bind": { "input": "input.image" } },
+        {
+          "id": "encode",
+          "capability": "cli:avifenc:png-to-avif-lossless",
+          "options": { "lossless": true },
+          "bind": { "input": "steps.decode.output" }
+        }
+      ],
+      "prerequisites": {
+        "programs": [
+          { "path": "/usr/bin/dwebp", "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333", "package": "libwebp" },
+          { "path": "/usr/bin/avifenc", "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444", "package": "libavif" },
+          { "path": "/usr/bin/avifdec", "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555", "package": "libavif" }
+        ],
+        "formats": ["bytes:image/webp", "bytes:image/png", "bytes:image/avif"],
+        "claims": ["claim:dwebp:pixels-exact", "claim:avifenc:lossless-pixels-exact"],
+        "authority": {
+          "effectClasses": ["sandbox-write"],
+          "executables": ["/usr/bin/dwebp", "/usr/bin/avifenc", "/usr/bin/avifdec"],
+          "network": false
+        }
+      },
+      "successConditions": [
+        {
+          "witness": "decoder:avifdec+pixel-compare",
+          "check": "the AVIF output decodes to pixels identical to the decoded WebP input",
+          "on": "steps.encode.output"
+        }
+      ],
+      "limitations": [
+        { "text": "Without --lossless, avifenc changes pixels.", "claim": "claim:avifenc:default-pixels-exact" },
+        { "text": "A lossy WebP's pixels are its decoded pixels, not the image it was made from." },
+        { "text": "Animated WebP is refused.", "inputClass": "bytes:image/webp;animated" }
+      ],
+      "provenance": {
+        "acquiredBy": { "kind": "model", "id": "acquirer", "model": "model-A", "session": "acquisition-1" },
+        "acquiredAt": "2026-11-05T11:40:00Z",
+        "receipts": ["receipt:placeholder-1"],
+        "ledger": [
+          { "trial": "trial:decode-1", "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666" },
+          { "trial": "trial:encode-1", "digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777" }
+        ]
+      },
+      "selfTest": {
+        "fixtures": [
+          { "id": "valid-lossy-webp", "inputs": { "image": "sha256:8888888888888888888888888888888888888888888888888888888888888888" }, "expect": "pass" },
+          { "id": "truncated-webp", "inputs": { "image": "sha256:9999999999999999999999999999999999999999999999999999999999999999" }, "expect": "refuse" }
+        ]
+      },
+      "status": "established"
+    }
+  ],
+  "claims": [
+    {
+      "schema": "context-cortex/affordance-claim/v0",
+      "id": "claim:dwebp:pixels-exact",
+      "capability": "cli:dwebp:webp-to-png",
+      "kind": "preservation",
+      "statement": { "text": "dwebp writes a PNG with exactly the WebP's decoded pixels.", "property": "pixels", "value": "exact" },
+      "state": "established",
+      "source": "experiment",
+      "evidence": {
+        "supporting": [
+          { "trial": "trial:dwebp-a", "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+          { "trial": "trial:dwebp-b", "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+        ],
+        "refuting": [],
+        "witnesses": [
+          {
+            "id": "validator:png",
+            "origin": "built-in",
+            "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "calibration": { "status": "calibrated", "referencesAccepted": 4, "mutationsRejected": 6, "mutationsTried": 6 }
+          }
+        ],
+        "promotionRule": "preservation/deterministic-two-inputs/calibrated-witness"
+      },
+      "history": [
+        { "state": "hypothesised", "at": "2026-11-05T11:30:00Z", "by": { "kind": "model", "id": "acquirer", "model": "model-A" }, "reason": "usage text" },
+        { "state": "established", "at": "2026-11-05T11:32:00Z", "by": { "kind": "engine", "id": "context-cortex" } }
+      ]
+    },
+    {
+      "schema": "context-cortex/affordance-claim/v0",
+      "id": "claim:avifenc:lossless-pixels-exact",
+      "capability": "cli:avifenc:png-to-avif-lossless",
+      "kind": "preservation",
+      "statement": {
+        "text": "With --lossless, avifenc writes an AVIF that decodes to exactly the PNG's pixels.",
+        "property": "pixels",
+        "value": "exact",
+        "conditions": ["--lossless"]
+      },
+      "state": "established",
+      "source": "experiment",
+      "evidence": {
+        "supporting": [
+          { "trial": "trial:avifenc-a", "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" },
+          { "trial": "trial:avifenc-b", "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" }
+        ],
+        "refuting": [],
+        "witnesses": [
+          {
+            "id": "decoder:avifdec+pixel-compare",
+            "origin": "acquired",
+            "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "calibration": { "status": "calibrated", "referencesAccepted": 4, "mutationsRejected": 5, "mutationsTried": 5 }
+          }
+        ],
+        "promotionRule": "preservation/deterministic-two-inputs/calibrated-witness"
+      },
+      "history": [
+        { "state": "hypothesised", "at": "2026-11-05T11:33:00Z", "by": { "kind": "model", "id": "acquirer", "model": "model-A" }, "reason": "flag name suggests lossless; never trusted by name" },
+        { "state": "established", "at": "2026-11-05T11:36:00Z", "by": { "kind": "engine", "id": "context-cortex" } }
+      ]
+    },
+    {
+      "schema": "context-cortex/affordance-claim/v0",
+      "id": "claim:avifenc:default-pixels-exact",
+      "capability": "cli:avifenc:png-to-avif",
+      "kind": "preservation",
+      "statement": { "text": "Without flags, avifenc preserves pixels.", "property": "pixels", "value": "exact" },
+      "state": "contradicted",
+      "source": "model-hypothesis",
+      "evidence": {
+        "supporting": [],
+        "refuting": [
+          { "trial": "trial:avifenc-default-a", "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }
+        ]
+      },
+      "history": [
+        { "state": "hypothesised", "at": "2026-11-05T11:33:00Z", "by": { "kind": "model", "id": "acquirer", "model": "model-A" } },
+        { "state": "contradicted", "at": "2026-11-05T11:34:00Z", "by": { "kind": "engine", "id": "context-cortex" }, "reason": "decoded pixels differ" }
+      ]
+    }
+  ],
+  "artefacts": [],
+  "evidence": [],
+  "carriesAuthority": false,
+  "importPolicy": { "requireRevalidation": true, "initialStatus": "imported-unvalidated" }
+}

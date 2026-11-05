@@ -1,0 +1,18 @@
+{
+  "name": "context-cortex",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A self-expanding capability layer for AI, built on RightClick X's context tools. Research phase.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "check": "node scripts/check-schemas.mjs",
+    "test": "node scripts/check-schemas.mjs"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
+  }
+}
