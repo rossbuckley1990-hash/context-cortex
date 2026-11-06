@@ -17,7 +17,7 @@ const PY = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/pyt
 
 const MAX_SCAN_BYTES = 512 * 1024;
 const MAX_ENTRIES = 500;
-const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+export const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
 const TEXT_EXT = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".py", ".html", ".json", ".yml", ".yaml", ".toml", ".sh", ".bash", ".zsh", ".sql", ".env", ".rb", ".php", ".go", ".rs", ".txt", ".md"]);
 const JS_EXT = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"]);
 
@@ -221,7 +221,7 @@ function huntFile(rel, text, lines) {
  *  successful drive is visible in the run's file changes and undone with it. The command payloads
  *  keep a benign first operand: `x; touch …` — a payload that left the command operand-less (as
  *  `; touch …` does to `wc -c x`) could make the target read stdin and hang the drive. */
-function payloadFor(kind, seq, isJS) {
+export function payloadFor(kind, seq, isJS) {
   const marker = `recon-marker-${seq}.txt`;
   if (kind === "exec") return { argument: `x; touch ${marker}`, marker, proves: "the attacker's string ran as a shell command" };
   if (kind === "eval") {
@@ -232,6 +232,21 @@ function payloadFor(kind, seq, isJS) {
   if (kind === "read") return { argument: "/etc/passwd", marker: null, proves: "a file outside the workspace was read through the attacker-controlled path" };
   if (kind === "write") return { argument: `../${marker}`, marker, proves: "the code wrote to a path outside the workspace chosen by the attacker" };
   return null;
+}
+
+/** Whether one run of the real code proved the payload's impact. Write routes prove through the
+ *  sandbox's refusal naming the attacker's marker — unconfined the write would have landed. The
+ *  refusal is reported as EACCES/EPERM under sandbox-exec and as EROFS under bubblewrap (its
+ *  rootfs is mounted read-only), so both spellings count. */
+export function payloadProof(drive, payload, r) {
+  const out = String(r.stdout ?? "");
+  const err = String(r.stderr ?? "");
+  if (drive === "write") {
+    return (payload.marker ? err.includes(payload.marker) : true) && /EACCES|EPERM|EROFS|permission denied|read-only file system/i.test(err);
+  }
+  if (payload.marker) return r.changes.some((c) => c.path === payload.marker && (c.kind === "added" || c.kind === "changed"));
+  if (drive === "read") return /root:[x*]:0:0:|daemon:|nobody:/.test(out);
+  return false;
 }
 
 /**
@@ -248,21 +263,9 @@ async function driveFinding(cx, ws, f, seq, actor) {
   let proved = 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     const r = await run(cx, { workspace: ws.root, program, args: [f.file, p.argument], timeoutMs: cx.grant.limits.timeoutMs }, actor);
-    const out = String(r.stdout ?? "");
-    const err = String(r.stderr ?? "");
-    let proof = false;
-    if (f.drive === "write") {
-      // The write targets a path outside the workspace: the sandbox must refuse it, so the proof
-      // is the refusal itself, naming the attacker's marker. sandbox-exec reports EACCES/EPERM;
-      // bubblewrap mounts the rootfs read-only and reports EROFS.
-      proof = (p.marker ? err.includes(p.marker) : true) && /EACCES|EPERM|EROFS|permission denied|read-only file system/i.test(err);
-    } else if (p.marker) {
-      proof = r.changes.some((c) => c.path === p.marker && (c.kind === "added" || c.kind === "changed"));
-    } else if (f.drive === "read") {
-      proof = /root:[x*]:0:0:|daemon:|nobody:/.test(out);
-    }
+    const proof = payloadProof(f.drive, p, r);
     if (proof) proved += 1;
-    runs.push({ change: r.change, passed: r.passed, exitCode: r.exitCode, proof, changes: r.changes.map((c) => `${c.kind} ${c.path}`), stdoutTail: out.slice(-200), stderrTail: err.slice(-300) });
+    runs.push({ change: r.change, passed: r.passed, exitCode: r.exitCode, proof, changes: r.changes.map((c) => `${c.kind} ${c.path}`), stdoutTail: String(r.stdout ?? "").slice(-200), stderrTail: String(r.stderr ?? "").slice(-300) });
     await undo(cx, { change: r.change }, actor).catch(() => {});
   }
   if (proved === 2) {
@@ -287,11 +290,11 @@ async function driveFinding(cx, ws, f, seq, actor) {
 
 // ───────────────────────────── the scan ─────────────────────────────
 
-export async function recon(cx, req, actor) {
-  if (!isObject(req)) throw new Refusal("bad-request", "recon takes an object");
-  const ws = grantedWorkspace(cx.grant, requireString(req.workspace, "workspace"));
-  const driveLimit = Math.min(Math.max(0, Number(req.driveLimit ?? 10)), 25);
-  const listing = files(cx, { workspace: ws.root, limit: 5000 });
+/** One static scan of a workspace: the map and every taint finding, with no drives run. Shared by
+ *  recon (which then drives routes), repair (which then fixes them) and plan (which grounds a
+ *  requirement in what is here). */
+export function scanWorkspace(cx, root) {
+  const listing = files(cx, { workspace: root, limit: 5000 });
   const languages = {};
   const entryPointsOut = [];
   const capabilityCounts = {};
@@ -307,19 +310,19 @@ export async function recon(cx, req, actor) {
   for (const f of listing.files) {
     if (f.path === "package.json") {
       try {
-        pkg = JSON.parse(readFileSync(join(ws.root, f.path), "utf8"));
+        pkg = JSON.parse(readFileSync(join(root, f.path), "utf8"));
         deps.npm = [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.devDependencies ?? {})];
       } catch { /* not JSON */ }
     }
     if (f.path === "requirements.txt") {
       try {
-        deps.python = readFileSync(join(ws.root, f.path), "utf8").split("\n").map((l) => l.split(/[=<>~#]/)[0].trim()).filter(Boolean);
+        deps.python = readFileSync(join(root, f.path), "utf8").split("\n").map((l) => l.split(/[=<>~#]/)[0].trim()).filter(Boolean);
       } catch { /* unreadable */ }
     }
   }
 
   for (const f of listing.files) {
-    const abs = join(ws.root, f.path);
+    const abs = join(root, f.path);
     const ext = `.${f.path.split(".").pop()}`;
     if (!TEXT_EXT.has(ext) || f.size > MAX_SCAN_BYTES) continue;
     scanned += 1;
@@ -338,6 +341,18 @@ export async function recon(cx, req, actor) {
     }
     findings.push(...huntFile(f.path, text, lines));
   }
+
+  return { total: listing.total, scanned, lines: linesTotal, languages, entryPoints: entryPointsOut, capabilities: capabilityCounts, secrets: secretFindings, findings, pkg, deps };
+}
+
+export async function recon(cx, req, actor) {
+  if (!isObject(req)) throw new Refusal("bad-request", "recon takes an object");
+  const ws = grantedWorkspace(cx.grant, requireString(req.workspace, "workspace"));
+  const driveLimit = Math.min(Math.max(0, Number(req.driveLimit ?? 10)), 25);
+  const s = scanWorkspace(cx, ws.root);
+  const { findings } = s;
+  const entryPointsOut = s.entryPoints;
+  const secretFindings = s.secrets;
 
   // Exploitation drives: argv-sourced candidates, most severe first, at most driveLimit.
   const drivable = findings.filter((f) => f.drive).sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.line - b.line).slice(0, driveLimit);
@@ -371,7 +386,7 @@ export async function recon(cx, req, actor) {
   };
   const list = (status) => findings.filter((f) => f.drive.status === status).map((f) => `${f.file}:${f.line} ${f.class}`);
   cx.ledger.append("recon", {
-    workspace: ws.root, files: scanned, lines: linesTotal, at: now(), ...summary,
+    workspace: ws.root, files: s.scanned, lines: s.lines, at: now(), ...summary,
     findings: [...list("exploited"), ...list("contained-by-sandbox"), ...list("failed"), ...list("not-drivable")],
     by: actor,
   });
@@ -379,21 +394,21 @@ export async function recon(cx, req, actor) {
     workspace: ws.root,
     at: now(),
     map: {
-      files: listing.total,
-      scanned,
-      lines: linesTotal,
-      languages,
+      files: s.total,
+      scanned: s.scanned,
+      lines: s.lines,
+      languages: s.languages,
       entryPoints: entryPointsOut.slice(0, MAX_ENTRIES),
       entryPointsTruncated: Math.max(0, entryPointsOut.length - MAX_ENTRIES),
-      capabilities: capabilityCounts,
-      dependencies: deps,
+      capabilities: s.capabilities,
+      dependencies: s.deps,
       secrets: secretFindings.slice(0, MAX_ENTRIES),
     },
     findings,
     summary,
     coverage: {
-      filesScanned: `${scanned} of ${listing.total} (text files up to ${MAX_SCAN_BYTES / 1024} KB; .git, node_modules and vendored trees skipped)`,
-      languages: Object.keys(languages),
+      filesScanned: `${s.scanned} of ${s.total} (text files up to ${MAX_SCAN_BYTES / 1024} KB; .git, node_modules and vendored trees skipped)`,
+      languages: Object.keys(s.languages),
       sinkPatterns: { JavaScript: JS_SINKS.length, TypeScript: JS_SINKS.length, Python: PY_SINKS.length },
       method: "function-scoped static taint analysis plus sandboxed exploitation drives on argv-sourced routes; no interprocedural data flow, no dynamic dispatch, no reflection, and no driving of request-sourced routes without a live server and a network grant",
       note: "Exploited means reproduced twice by running the real code with the payload shown, every change undone. Contained means the code followed the attacker's path and the sandbox refused it. Candidates are static evidence only. No finding means this scan saw nothing on these files — never that the code is secure.",

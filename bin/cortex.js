@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { Cortex, defaultHome, operatorActor, VERSION } from "../src/cortex.js";
 import { audit } from "../src/audit.js";
 import { recon } from "../src/hunt.js";
+import { repair } from "../src/repair.js";
+import { plan } from "../src/plan.js";
 import { defaultGrant, loadGrant, saveGrant } from "../src/grant.js";
 import { compose, simulate } from "../src/compose.js";
 import { apply } from "../src/apply.js";
@@ -53,6 +55,8 @@ Code:
   undo <change-id>                        put back every file an edit or run changed
   exec --workspace <dir> <program> [args…]  run any executable in the workspace, sandboxed
   recon --workspace <dir> [--drive-limit n] every way in: entries, taint routes, exploit-verified
+  repair --workspace <dir> [--file f] [--classes a,b] [--limit n]  fix what recon proved open, with proof
+  plan "<requirement>" [--workspace <dir>] [--limit n]   any requirement as grounded, executable steps
 
 Discovery:
   discover [--limit n] [--refresh] [--formats a,b]   survey every granted program
@@ -207,6 +211,10 @@ async function main() {
     }
     case "recon":
       return print(await recon(cx, { workspace: absolute(resolve(flags.workspace ?? ".")), driveLimit: flags["drive-limit"] ? Number(flags["drive-limit"]) : undefined }, actor));
+    case "repair":
+      return print(await repair(cx, { workspace: absolute(resolve(flags.workspace ?? ".")), file: flags.file, classes: flags.classes ? String(flags.classes).split(",").map((s) => s.trim()).filter(Boolean) : undefined, limit: flags.limit ? Number(flags.limit) : undefined }, actor));
+    case "plan":
+      return print(plan(cx, { requirement: (positional[0] ?? flags.requirement ?? "").toString(), workspace: flags.workspace ? absolute(resolve(flags.workspace)) : undefined, limit: flags.limit ? Number(flags.limit) : undefined }, actor));
     case "discover":
       return print(await cx.discover({ limit: flags.limit ? Number(flags.limit) : 25, refresh: !!flags.refresh, formats: flags.formats ? String(flags.formats).split(",") : undefined }));
     case "artefact":

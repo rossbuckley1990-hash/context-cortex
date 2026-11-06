@@ -210,12 +210,55 @@ sample meets every kind of deterministic damage, and a weakness counts only when
 - **Honesty:** the report states the files, languages and sink patterns scanned and the method's
   limits; no finding means this scan saw nothing on these files — never that the code is secure.
 
+## Repair with proof
+
+`context_repair` fixes what recon proved open — and a fix only counts when it survives the proof:
+
+```json
+{ "workspace": "/home/me/src/app", "limit": 10, "test": { "program": "/usr/bin/node", "args": ["--test"] } }
+```
+
+- **Recipe guards:** for command injection, eval injection and path traversal, a one-line guard is
+  built for the exact sink (refuse shell metacharacters, restrict eval to arithmetic, refuse absolute
+  and `..` paths) and applied through `context_edit`, so it is reversible like any edit.
+- **The proof, per finding:** the payload must reproduce on the unchanged code first (otherwise the
+  route is `not-open` and nothing is changed); after the guard, the exact payload is re-driven twice
+  and must not reproduce; a benign input must behave identically before and after (same exit status
+  and standard output — standard error is platform diagnostics); the workspace's own tests must not
+  regress. Any failed check reverts the fix byte-exactly and names the check that failed, keeping the
+  attempted diff for a hand fix.
+- **Statuses:** `closed` (the payload is dead), `hardened` (a write the code itself now refuses), plus
+  `reverted`, `revert-failed`, `not-open`, `not-fixed`. Routes the sandbox cannot drive and classes with
+  no honest one-line guard (SQL injection, XSS, SSRF, prototype pollution, deserialization) come back
+  as `needs-redesign` with the reasoning — never silently skipped. Anything filtered out or beyond the
+  limit is `skipped` and says so.
+- **Honesty:** `closed` is proven for the payload driven, never for every input or every class.
+
+## Make a requirement actionable
+
+`context_plan` compiles any plain-language requirement into grounded, executable steps:
+
+```json
+{ "requirement": "find and fix the command injection in the CLI, then make the tests pass", "workspace": "/home/me/src/app" }
+```
+
+- **Grounded, not invented:** with a workspace, the plan is compiled from a real scan and overview —
+  entry points, static findings, a file list, the detected test command — and each step names the exact
+  tool and arguments, down to the files to read and the edits to make. What grounding cannot fill is a
+  marked placeholder (`<exact text as read>`), never invented content.
+- **Any intent:** hunt, fix, bug, understand, change, test, run, data — recognised from the wording and
+  mapped to the tools that serve it: recon and repair for hunt/fix/bug, `context_edit` plus a test run
+  for changes, environment/possibilities/goal/gap/skill for data work with no workspace needed.
+- **Honesty:** what is missing is stated as a need (a granted workspace for code work, a program, a
+  skill). The plan is ledgered, and each step's outcome — not the plan — decides what is established.
+
 ## CLI equivalents
 
 ```text
 cortex probe /usr/bin/gzip
 cortex experiment spec.json          cortex calibrate witness.json
 cortex audit audit.json              cortex recon --workspace ~/src/app
+cortex repair --workspace ~/src/app  cortex plan "fix the command injection in ~/src/app"
 cortex claims --operation gzip.compress
 cortex crystallize skill.json        cortex run gzip-verified --in text=/samples/new.txt --deliver /out/x.gz
 cortex goal --have text/plain --want application/gzip --preserve bytes
@@ -234,6 +277,8 @@ cortex ledger verify
 | `context_witness` | `{"action": "calibrate", "witness": {…}, "references": [{"bind": {…}}]}`, `{"action": "list"}` |
 | `context_audit` | `{"operation": "gzip.decompress", "inputs": {"data": ["sha256:…", "sha256:…"]}}` |
 | `context_recon` | `{"workspace": "/home/me/src/app", "driveLimit": 10}` |
+| `context_repair` | `{"workspace": "/home/me/src/app", "limit": 10, "test": {"program": "/usr/bin/node", "args": ["--test"]}}` |
+| `context_plan` | `{"requirement": "find and fix the command injection in the CLI", "workspace": "/home/me/src/app"}` |
 | `context_claims` | `{"operation": "gzip.compress", "state": "observed"}` |
 | `context_explain` | `{"claim": "gzip.compress:lossless"}`, `{"operation": "gzip.decompress"}`, `{"entry": 42}` |
 | `context_gap` | `{"have": "application/gzip", "want": "text/plain", "preserve": ["bytes"]}`. Submit each draft's `first` then `then` |

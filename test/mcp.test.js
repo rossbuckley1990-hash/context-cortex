@@ -70,7 +70,7 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   const list = await send("tools/list", {});
   const names = list.result.tools.map((t) => t.name);
   assert.deepEqual(names, [
-    "context_status", "context_environment", "context_manual", "context_apply", "context_workspace", "context_edit", "context_run", "context_audit", "context_recon", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
+    "context_status", "context_environment", "context_manual", "context_apply", "context_workspace", "context_edit", "context_run", "context_audit", "context_recon", "context_repair", "context_plan", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
     "context_claims", "context_explain", "context_goal", "context_gap", "context_possibilities", "context_simulate",
     "context_compose", "context_crystallize", "context_skill", "context_evolve", "context_transfer", "context_ledger",
   ]);
@@ -82,7 +82,7 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   assert.deepEqual(status.grant.programs, [GZIP]);
 
   const envModel = await ok("context_environment", {});
-  assert.equal(envModel.cortex.tools, 26);
+  assert.equal(envModel.cortex.tools, 28);
   const rules = await ok("context_manual", { topic: "rules" });
   assert.ok(rules.rules.claimStates.established.length >= 3);
   const survey = await ok("context_discover", {});
@@ -109,6 +109,16 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   assert.equal(rc.summary.exploited, 1, JSON.stringify(rc.summary));
   const inj = rc.findings.find((f) => f.class === "command-injection");
   assert.equal(inj.drive.status, "exploited");
+
+  const rp = await ok("context_repair", { workspace: join(env.root, "recon-ws") });
+  assert.equal(rp.summary.closed, 1, JSON.stringify(rp.summary));
+  assert.equal(rp.summary.reverted, 0);
+  const fixed = await ok("context_workspace", { action: "read", workspace: join(env.root, "recon-ws"), path: "inj.js" });
+  assert.match(fixed.content, /untrusted argument/, "the guard is really in the file");
+
+  const pl = await ok("context_plan", { requirement: "find and fix the command injection in inj.js", workspace: join(env.root, "recon-ws") });
+  assert.ok(pl.steps.some((s) => s.tool === "context_repair"), JSON.stringify(pl.steps.map((s) => s.tool)));
+  assert.deepEqual(pl.intents, ["hunt", "fix"]);
   assert.match(rc.coverage.note, /never that the code is secure/);
 
   const w = await ok("context_witness", { action: "calibrate", witness: { id: "gzip-roundtrip", builtin: "bytes-equal", params: ["original", "compressed"], via: { compressed: "gzip.decompress" } }, references: [{ bind: { original: { text: texts[0] }, compressed: gz[0] } }, { bind: { original: { text: texts[1] }, compressed: gz[1] } }] });

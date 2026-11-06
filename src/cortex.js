@@ -916,6 +916,8 @@ function summariseEntry(e) {
   if (e.kind === "grant") return `grant ${b.change} ${b.path ?? ""}`.trim();
   if (e.kind === "audit") return `audit of ${b.operation}: ${b.findings?.length ?? 0} finding(s) (${(b.findings ?? []).map((f) => f.class).join(", ") || "none"}), ${b.refusals ?? 0} clean refusal(s)`;
   if (e.kind === "recon") return `recon of ${b.workspace}: ${b.files} file(s), ${b.exploited ?? 0} exploited, ${b.contained ?? 0} contained, ${b.candidates ?? 0} candidate(s), ${b.secrets ?? 0} secret(s)`;
+  if (e.kind === "repair") return `repair of ${b.workspace}: ${b.closed ?? 0} closed, ${b.hardened ?? 0} hardened, ${b.reverted ?? 0} reverted, ${b.needsRedesign ?? 0} to redesign`;
+  if (e.kind === "plan") return `plan: ${b.steps} step(s) for "${(b.requirement ?? "").slice(0, 60)}"${b.workspace ? ` (${b.workspace})` : ""}`;
   return Object.keys(b).slice(0, 4).join(", ");
 }
 
