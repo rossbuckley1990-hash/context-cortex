@@ -20,6 +20,7 @@ function compact(env) {
     authority: env.authority,
     programs: env.programs.list.map((p) => ({ program: p.program, ...(p.summary ? { summary: p.summary } : {}), ...(p.mentions?.length ? { mentions: p.mentions } : {}), ...(p.operations.length ? { operations: p.operations.map((o) => o.id) } : {}), ...(Object.keys(p.claims).length ? { claims: p.claims } : {}), ...(p.surveyed === false ? { surveyed: false } : {}) })),
     data: { files: env.data.files, bytes: env.data.bytes, formats: env.data.formats.map((f) => ({ format: f.format, files: f.files, examples: f.examples })) },
+    workspaces: env.workspaces,
     canDo: env.canDo,
     knowledge: { claims: env.knowledge.claims, skills: env.knowledge.skills, contradicted: env.knowledge.contradicted },
     recommendations: env.recommendations,
@@ -46,9 +47,10 @@ export async function buildPrompt(cx, request) {
     "",
     "How to work:",
     "- Prefer what is already established: context_goal, context_skill, context_apply. Learn only what the request needs: context_gap gives drafts; context_probe, context_experiment and context_witness learn; context_compose builds a skill.",
+    "- For requests about code: understand first (context_workspace overview, search, read), make small edits with context_edit (always pass the expectDigest you read and a reason), then prove the change with context_run (the project's tests or build). Report the change ids, the diffs that matter and the test result. If a change makes things worse, undo it with context_edit action undo.",
     "- Never claim more than the engine established. If something cannot be done or proven inside the grant, say exactly why and what the operator would need to grant.",
     "- Deliver results only where the request asks and the grant allows.",
-    "- Finish with a short report: what you did, what is now established (with claim or skill ids), what was delivered and where, and what you could not do.",
+    "- Finish with a short report: what you did, what is now established (with claim or skill ids), what was delivered and where, the code changes with their change ids and test results, and what you could not do.",
   ].join("\n");
 }
 
@@ -93,6 +95,9 @@ export async function runRequest(cx, request, { maxTurns = 80, model, agent = pr
     byKind,
     delivered: entries.filter((e) => e.kind === "skill-run" && e.body.delivered).map((e) => ({ skill: e.body.skill, path: e.body.delivered })),
     skills: entries.filter((e) => e.kind === "skill").map((e) => ({ skill: e.body.skill, status: e.body.status })),
+    codeChanges: entries.filter((e) => (e.kind === "edit" || e.kind === "workspace-run") && e.body.changes?.length).map((e) => ({ change: `${e.kind}-${e.seq}`, files: e.body.changes.map((c) => c.path) })),
+    runs: entries.filter((e) => e.kind === "workspace-run").map((e) => ({ run: `workspace-run-${e.seq}`, command: [e.body.program.path.split("/").pop(), ...e.body.args].join(" "), exitCode: e.body.exitCode })),
+    undone: entries.filter((e) => e.kind === "undo").map((e) => e.body.of),
     ledgerIntact: cx.ledger.verify().intact,
   };
   const record = { request, agent, startedAt: new Date(started).toISOString(), exitCode: code, outcome: result.subtype ?? null, isError: !!result.is_error || code !== 0, turns: result.num_turns ?? null, costUsd: result.total_cost_usd ?? null, durationS: Math.round((Date.now() - started) / 1000), report: result.result ?? null, effects, ...(stderr.trim() ? { stderr: stderr.slice(-2000) } : {}) };

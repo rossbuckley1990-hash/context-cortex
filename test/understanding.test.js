@@ -23,8 +23,8 @@ before(async () => {
 test("the environment model covers host, sandbox, authority, programs, data, knowledge and what can be done", async () => {
   const e = await environment(cx, { survey: true });
   assert.ok(e.host.platform && e.host.cpus >= 1);
-  assert.ok(e.sandbox.kind === null || e.sandbox.enforces.includes("no network"));
-  assert.equal(e.cortex.tools, 21);
+  assert.ok(e.sandbox.kind === null || e.sandbox.enforces.some((x) => /^no network/.test(x)));
+  assert.equal(e.cortex.tools, 24);
   const gz = e.programs.list.find((p) => p.operations.some((o) => o.id === "gzip.compress"));
   assert.ok(gz.mentions.includes("application/gzip"));
   assert.ok(gz.claims.established >= 4);
@@ -40,10 +40,10 @@ test("the environment model covers host, sandbox, authority, programs, data, kno
 
 test("the manual states the rules the code enforces", async () => {
   const m = await manual(cx);
-  assert.equal(m.tools.length, 21);
+  assert.equal(m.tools.length, 24);
   assert.ok(m.rules.claimStates.established.some((r) => /two distinct inputs/.test(r)));
   assert.ok(m.formats.detectedBySignature.includes("application/gzip"));
-  assert.ok(m.safety.sandbox.includes("no network"));
+  assert.ok(m.safety.sandbox.some((x) => /^no network/.test(x)));
   const usage = await manual(cx, "usage");
   assert.match(usage.usage, /Using Context Cortex/);
   await assert.rejects(manual(cx, "nonsense"), /unknown topic/);
@@ -78,7 +78,7 @@ test("a request in plain language is carried out by an agent restricted to Corte
   assert.ok(dry.bytes < 70_000);
   const r = await runRequest(cx, "compress every text file losslessly", { agent: FAKE });
   assert.equal(r.isError, false, r.report);
-  assert.match(r.report, /tools: 21; request: seen; applied 3 of 3/);
+  assert.match(r.report, /tools: 24; request: seen; applied 3 of 3/);
   assert.equal(r.effects.delivered.length, 3);
   assert.ok(r.effects.delivered.every((d) => existsSync(d.path)));
   assert.equal(r.effects.ledgerIntact, true);

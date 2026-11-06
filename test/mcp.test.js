@@ -65,7 +65,7 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   const list = await send("tools/list", {});
   const names = list.result.tools.map((t) => t.name);
   assert.deepEqual(names, [
-    "context_status", "context_environment", "context_manual", "context_apply", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
+    "context_status", "context_environment", "context_manual", "context_apply", "context_workspace", "context_edit", "context_run", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
     "context_claims", "context_explain", "context_goal", "context_gap", "context_possibilities", "context_simulate",
     "context_compose", "context_crystallize", "context_skill", "context_evolve", "context_transfer", "context_ledger",
   ]);
@@ -77,7 +77,7 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   assert.deepEqual(status.grant.programs, [GZIP]);
 
   const envModel = await ok("context_environment", {});
-  assert.equal(envModel.cortex.tools, 21);
+  assert.equal(envModel.cortex.tools, 24);
   const rules = await ok("context_manual", { topic: "rules" });
   assert.ok(rules.rules.claimStates.established.length >= 3);
   const survey = await ok("context_discover", {});
@@ -153,6 +153,13 @@ test("refusals come back as tool errors, and nothing outside the grant runs", as
   const read = await tool("context_experiment", { action: "sample", source: { path: "/etc/passwd" } });
   assert.equal(read.isError, true);
   assert.match(read.content[0].text, /outside the operator's read roots/);
+  const ws = await ok("context_workspace", {});
+  assert.deepEqual(ws.workspaces, [], "no workspace is granted in this environment");
+  const editOutside = await tool("context_edit", { workspace: env.samples, path: "a.txt", content: "x" });
+  assert.equal(editOutside.isError, true);
+  assert.match(editOutside.content[0].text, /not inside a code workspace/);
+  const runOutside = await tool("context_run", { workspace: env.samples, program: GZIP, args: ["--version"] });
+  assert.equal(runOutside.isError, true);
   const unknown = await send("tools/call", { name: "context_grant", arguments: {} });
   assert.equal(unknown.error.code, -32602);
 });

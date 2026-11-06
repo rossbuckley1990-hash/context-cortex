@@ -13,6 +13,7 @@ import { detectPrefix, extensionFor, KNOWN_FORMATS, MUTATIONS } from "./formats.
 import { possibilities } from "./goal.js";
 import { detectSandbox, SANDBOX_POLICY } from "./sandbox.js";
 import { listSkills } from "./skills.js";
+import { overview as workspaceOverview } from "./workspace.js";
 import { Refusal, within } from "./util.js";
 
 const PREFIX = 4096;
@@ -131,6 +132,7 @@ export async function environment(cx, { survey = false, limit = 25, maxFiles = 2
     const candidates = programs.filter((p) => p.mentions?.includes(f.format)).map((p) => p.program.split("/").pop());
     recommendations.push(`${f.files} ${f.format} file(s) and nothing established can act on them${candidates.length ? `; programs that mention ${f.format}: ${candidates.join(", ")} (context_probe, then context_experiment)` : ""}`);
   }
+  if (!grant.workspaces.length) recommendations.push("operator: no code workspaces are granted, so Cortex cannot act on code; `cortex grant add-workspace <dir>` (add --network if its builds need it)");
   const stale = programs.filter((p) => p.changedSinceLearned).map((p) => p.program);
   if (stale.length) recommendations.push(`programs changed since they were learned: ${stale.join(", ")}; context_evolve re-proves them`);
   const unfinished = (status.counts.claimsByState.observed ?? 0) + (status.counts.claimsByState.hypothesised ?? 0);
@@ -145,6 +147,7 @@ export async function environment(cx, { survey = false, limit = 25, maxFiles = 2
     authority: { programs: grant.programs, readRoots: grant.readRoots, writeRoots: grant.writeRoots, network: false, limits: grant.limits, note: "Only the operator changes this. No tool can widen it." },
     programs: { granted: programs.length, surveyed: programs.length - unsurveyed, list: programs },
     data,
+    workspaces: workspaceOverview(cx).workspaces,
     knowledge: {
       claims: status.counts.claimsByState,
       operations: status.counts.operations,
@@ -193,6 +196,7 @@ export async function manual(cx, topic) {
         run: "inputs must really be the declared format; every step sandboxed; every success condition re-checked; a result that fails them is refused, never returned",
         usable: "established or revalidated, every program pin current, every witness current",
       },
+      code: "code workspaces are granted by the operator; context_workspace reads and searches them (never .git, never through a link out), context_edit changes files reversibly (exact-string replace, whole content or delete; expectDigest refuses to overwrite a concurrent change; every change keeps the bytes before and after and can be undone), context_run runs granted programs with the workspace writable and reports and can undo every file a run changed; network only where the operator granted it to that workspace",
       transfer: "a bundle never carries authority; artefacts are checked against their digests; skills start imported-unvalidated; revalidation re-runs every calibration, experiment and self-test here",
     },
     formats: {

@@ -47,7 +47,7 @@ export function exportBundle(cx, skillIds, actor) {
   const c = collect(cx, s, skillIds);
   const artefacts = c.digests.map((d) => {
     const meta = cx.artefacts.meta(d);
-    const origin = { sample: "operator-supplied", inline: "model-authored", "trial-output": "program-output", mutation: "engine-generated", imported: "imported" }[meta.origin];
+    const origin = { sample: "operator-supplied", inline: "model-authored", "trial-output": "program-output", mutation: "engine-generated", imported: "imported", workspace: "operator-supplied" }[meta.origin];
     return { id: d, digest: d, origin, role: "fixture", ...(meta.format ? { mediaType: meta.format } : {}), data: cx.artefacts.get(d).toString("base64") };
   });
   const pins = c.operations.map((o) => ({ path: o.pin.path, digest: o.pin.digest }));

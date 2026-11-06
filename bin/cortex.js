@@ -11,6 +11,7 @@ import { apply } from "../src/apply.js";
 import { runRequest } from "../src/agent.js";
 import { environment, manual } from "../src/environment.js";
 import { evolve } from "../src/evolve.js";
+import { changes, edit, files, overview, read, run as runInWorkspace, search, undo } from "../src/workspace.js";
 import { gap, goal } from "../src/goal.js";
 import { serveStdio } from "../src/mcp.js";
 import { crystallize, explainSkill, listSkills, runSkill } from "../src/skills.js";
@@ -31,6 +32,7 @@ Operator (the only way to change authority):
   grant add-program <path>                allow a program, or every program in a directory
   grant add-read-root <dir>               allow reading samples and inputs from a directory
   grant add-write-root <dir>              allow delivering outputs into a directory
+  grant add-workspace <dir> [--network]   allow reading, editing and running code in a directory
   grant remove <path>                     remove an entry from any list
   grant allow-unsandboxed <true|false>    run without a sandbox (off by default; not recommended)
 
@@ -42,6 +44,12 @@ Requests:
   manual [topic]                          the rules Cortex's code enforces
   apply --skill id --from <dir> --deliver-to <dir> [--recursive] [--limit n]
   apply --have t --want t [--preserve a] --from <dir> --deliver-to <dir>
+
+Code:
+  workspace [overview|files|read|search|changes] --workspace <dir> [--path p] [--pattern re]
+  edit <edit.json>                        a reversible edit (see context_edit)
+  undo <change-id>                        put back every file an edit or run changed
+  exec --workspace <dir> <program> [args…]  run a granted program in the workspace
 
 Discovery:
   discover [--limit n] [--refresh] [--formats a,b]   survey every granted program
@@ -109,9 +117,11 @@ async function grantCommand(sub, arg) {
   if (sub === "add-program") g.programs = [...new Set([...g.programs, path()])];
   else if (sub === "add-read-root") g.readRoots = [...new Set([...g.readRoots, path()])];
   else if (sub === "add-write-root") g.writeRoots = [...new Set([...g.writeRoots, path()])];
+  else if (sub === "add-workspace") g.workspaces = [...g.workspaces.filter((w) => w.path !== path()), { path: path(), network: !!flags.network }];
   else if (sub === "remove") {
     const p = path();
     for (const k of ["programs", "readRoots", "writeRoots"]) g[k] = g[k].filter((x) => x !== p);
+    g.workspaces = g.workspaces.filter((w) => w.path !== p);
   } else if (sub === "allow-unsandboxed") g.allowUnsandboxed = arg === "true";
   else if (sub === "reset") Object.assign(g, defaultGrant());
   else throw new Refusal("bad-request", `unknown grant command ${sub}`);
@@ -169,6 +179,26 @@ async function main() {
       return print(await manual(cx, positional[0]));
     case "apply":
       return print(await apply(cx, { skill: flags.skill, have: flags.have, want: flags.want, preserve: flags.preserve ? String(flags.preserve).split(",") : [], from: flags.from ? absolute(resolve(flags.from)) : undefined, recursive: !!flags.recursive, deliverTo: flags["deliver-to"] ? absolute(resolve(flags["deliver-to"])) : undefined, limit: flags.limit ? Number(flags.limit) : undefined }, actor));
+    case "workspace": {
+      const action = positional[0] ?? "overview";
+      const ws = flags.workspace ? absolute(resolve(flags.workspace)) : undefined;
+      if (action === "overview") return print(overview(cx, { workspace: ws }));
+      if (action === "files") return print(files(cx, { workspace: ws, pattern: flags.pattern }));
+      if (action === "read") return print(read(cx, { workspace: ws, path: flags.path }));
+      if (action === "search") return print(search(cx, { workspace: ws, pattern: flags.pattern, paths: flags.paths }));
+      if (action === "changes") return print(changes(cx, { workspace: ws, since: flags.since }));
+      throw new Refusal("bad-request", `unknown workspace action ${action}`);
+    }
+    case "edit":
+      return print(await edit(cx, readSpec(positional[0]), actor));
+    case "undo":
+      return print(await undo(cx, { change: positional[0] }, actor));
+    case "exec": {
+      const r = await runInWorkspace(cx, { workspace: absolute(resolve(flags.workspace ?? ".")), program: absolute(resolve(positional[0] ?? ""), "program"), args: positional.slice(1) }, actor);
+      print(r);
+      if (!r.passed) process.exitCode = 2;
+      return;
+    }
     case "discover":
       return print(await cx.discover({ limit: flags.limit ? Number(flags.limit) : 25, refresh: !!flags.refresh, formats: flags.formats ? String(flags.formats).split(",") : undefined }));
     case "artefact":

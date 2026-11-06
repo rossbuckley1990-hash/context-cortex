@@ -10,8 +10,8 @@ import { Refusal } from "./util.js";
 
 /** What confinement enforces, stated for the environment model and the manual. */
 export const SANDBOX_POLICY = [
-  "no network",
-  "writes only inside a fresh per-run work directory (and /dev/null)",
+  "no network (a code workspace may be granted network by the operator)",
+  "writes only inside a fresh per-run work directory (and /dev/null), plus the code workspace for context_run",
   "home directories (/Users, /home, /root) unreadable",
   "CPU time, file size, wall-clock time and output size limited",
   "minimal environment: fixed PATH, HOME and TMPDIR set to the work directory, C locale",
@@ -24,16 +24,17 @@ const PATH_DIRS = ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", "/bin", "/
 
 const sbString = (s) => JSON.stringify(s);
 
-function macProfile(work, readRoots) {
+function macProfile(work, readRoots, { writeRoots = [], network = false } = {}) {
   return [
     "(version 1)",
     "(allow default)",
-    "(deny network*)",
+    ...(network ? [] : ["(deny network*)"]),
     "(deny file-write*)",
     `(allow file-write* (subpath ${sbString(work)}) (literal "/dev/null") (literal "/dev/tty"))`,
+    ...writeRoots.map((r) => `(allow file-write* (subpath ${sbString(r)}))`),
     `(deny file-read* ${HOME_ROOTS.map((h) => `(subpath ${sbString(h)})`).join(" ")})`,
     `(allow file-read* (subpath ${sbString(work)}))`,
-    ...readRoots.map((r) => `(allow file-read* (subpath ${sbString(r)}))`),
+    ...[...readRoots, ...writeRoots].map((r) => `(allow file-read* (subpath ${sbString(r)}))`),
   ].join("\n");
 }
 
@@ -63,7 +64,7 @@ export function newWorkDir() {
 }
 
 /** Run one program. `work` must come from newWorkDir(); the caller stages files there. */
-async function execute({ kind, program, args, work, stdinPath, readRoots = [], timeoutMs, maxOutputBytes, cpuSeconds, maxFileKiB }) {
+async function execute({ kind, program, args, work, stdinPath, readRoots = [], writeRoots = [], network = false, cwd, timeoutMs, maxOutputBytes, cpuSeconds, maxFileKiB }) {
   const own = !work;
   const dir = work ?? newWorkDir();
   const roots = [...new Set([...readRoots, dirname(program)])];
@@ -72,14 +73,15 @@ async function execute({ kind, program, args, work, stdinPath, readRoots = [], t
     argv = ["/bin/sh", "-c", LIMITS, program, ...args];
   } else if (kind === "macos-sandbox-exec") {
     const profile = join(dir, ".cortex.sb");
-    writeFileSync(profile, macProfile(dir, roots));
+    writeFileSync(profile, macProfile(dir, roots, { writeRoots, network }));
     argv = ["/usr/bin/sandbox-exec", "-f", profile, "/bin/sh", "-c", LIMITS, program, ...args];
   } else if (kind.startsWith("linux-bwrap")) {
     const bwrap = kind.includes(":") ? kind.split(":")[1] : "/usr/bin/bwrap";
     argv = [
       bwrap, "--ro-bind", "/", "/", ...HOME_ROOTS.filter(existsSync).flatMap((h) => ["--tmpfs", h]),
       ...roots.filter(existsSync).flatMap((r) => ["--ro-bind", r, r]),
-      "--bind", dir, dir, "--dev", "/dev", "--proc", "/proc", "--unshare-all", "--die-with-parent", "--chdir", dir,
+      ...writeRoots.filter(existsSync).flatMap((r) => ["--bind", r, r]),
+      "--bind", dir, dir, "--dev", "/dev", "--proc", "/proc", "--unshare-all", ...(network ? ["--share-net"] : []), "--die-with-parent", "--chdir", cwd ?? dir,
       "/bin/sh", "-c", LIMITS, program, ...args,
     ];
   } else {
@@ -98,7 +100,7 @@ async function execute({ kind, program, args, work, stdinPath, readRoots = [], t
   const t0 = Date.now();
   try {
     return await new Promise((resolveRun, rejectRun) => {
-      const child = spawn(argv[0], argv.slice(1), { cwd: dir, env, stdio: [stdinPath ? "pipe" : "ignore", "pipe", "pipe"] });
+      const child = spawn(argv[0], argv.slice(1), { cwd: cwd ?? dir, env, stdio: [stdinPath ? "pipe" : "ignore", "pipe", "pipe"] });
       const out = [], err = [];
       let outBytes = 0, errBytes = 0, overflow = false, timedOut = false;
       child.stdout.on("data", (d) => {
@@ -134,7 +136,7 @@ async function execute({ kind, program, args, work, stdinPath, readRoots = [], t
 }
 
 /** Run a program under the host sandbox, or refuse. */
-export async function runConfined({ grant, program, args, work, stdinPath, timeoutMs }) {
+export async function runConfined({ grant, program, args, work, stdinPath, timeoutMs, writeRoots, network, cwd, maxOutputBytes }) {
   const sb = await detectSandbox();
   if (!sb.kind && !grant.allowUnsandboxed) {
     throw new Refusal("no-sandbox", `no sandbox is available (${sb.reason}); nothing was run. An operator may set allowUnsandboxed in the grant.`);
@@ -146,8 +148,11 @@ export async function runConfined({ grant, program, args, work, stdinPath, timeo
     work,
     stdinPath,
     readRoots: [],
-    timeoutMs: Math.min(timeoutMs ?? grant.limits.timeoutMs, grant.limits.timeoutMs),
-    maxOutputBytes: grant.limits.maxOutputBytes,
+    writeRoots: writeRoots ?? [],
+    network: !!network,
+    cwd,
+    timeoutMs: Math.min(timeoutMs ?? grant.limits.timeoutMs, grant.limits.workspaceTimeoutMs ?? grant.limits.timeoutMs),
+    maxOutputBytes: maxOutputBytes ?? grant.limits.maxOutputBytes,
   });
   return { ...r, sandbox: sb.kind ?? "none (operator allowed unsandboxed execution)" };
 }

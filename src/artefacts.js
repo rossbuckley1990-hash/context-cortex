@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { detect } from "./formats.js";
 import { ensureDir, now, readJson, Refusal, sha256, writeAtomic } from "./util.js";
 
-export const ORIGINS = ["sample", "inline", "trial-output", "mutation", "imported"];
+export const ORIGINS = ["sample", "inline", "trial-output", "mutation", "imported", "workspace"];
 
 export class ArtefactStore {
   constructor(dir, { maxBytes = 64 * 1024 * 1024 } = {}) {

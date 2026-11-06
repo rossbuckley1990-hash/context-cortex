@@ -9,17 +9,19 @@ export const DEFAULT_LIMITS = {
   maxTrialsPerExperiment: 48,
   maxOutputBytes: 64 * 1024 * 1024,
   maxBundleBytes: 32 * 1024 * 1024,
+  workspaceTimeoutMs: 300_000,
 };
 
 export function defaultGrant() {
-  return { version: 1, programs: [], readRoots: [], writeRoots: [], network: false, allowUnsandboxed: false, limits: { ...DEFAULT_LIMITS } };
+  return { version: 1, programs: [], readRoots: [], writeRoots: [], workspaces: [], network: false, allowUnsandboxed: false, limits: { ...DEFAULT_LIMITS } };
 }
 
 export function loadGrant(home) {
   const g = readJson(join(home, "grant.json"), null) ?? defaultGrant();
   const out = { ...defaultGrant(), ...g, limits: { ...DEFAULT_LIMITS, ...(g.limits ?? {}) } };
-  if (out.network) throw new Refusal("bad-grant", "network access is not supported in this version; set network to false");
+  if (out.network) throw new Refusal("bad-grant", "network is granted per code workspace (workspaces[].network), not globally; experiments never have network");
   for (const k of ["programs", "readRoots", "writeRoots"]) out[k] = (out[k] ?? []).map((p) => absolute(p, `grant.${k} entry`));
+  out.workspaces = (out.workspaces ?? []).map((w) => (typeof w === "string" ? { path: absolute(w, "grant.workspaces entry"), network: false } : { path: absolute(w.path, "grant.workspaces entry"), network: w.network === true }));
   return out;
 }
 
@@ -75,4 +77,45 @@ export function grantedWrite(grant, path) {
     throw new Refusal("not-granted", `path is outside the operator's write roots: ${given}`);
   }
   return target;
+}
+
+/** A granted code workspace containing `path` (or named by it). Returns { root, network }. */
+export function grantedWorkspace(grant, path) {
+  const given = absolute(path, "workspace");
+  const real = realpathOrNull(given);
+  if (!real) throw new Refusal("unknown-file", `workspace does not exist: ${given}`);
+  for (const w of grant.workspaces) {
+    const root = realpathOrNull(w.path);
+    if (root && within(real, root)) return { root, network: w.network, path: w.path };
+  }
+  throw new Refusal("not-granted", `not inside a code workspace the operator granted: ${given}. The operator can add it with: cortex grant add-workspace ${given}`);
+}
+
+/**
+ * Resolve a file inside a workspace, for reading or writing. Refuses anything that resolves
+ * outside the workspace (through .., absolute paths or symlinks) and anything inside .git.
+ */
+export function workspaceFile(ws, rel) {
+  if (typeof rel !== "string" || !rel || rel.includes("\0")) throw new Refusal("bad-path", "path must be a non-empty string");
+  const target = join(ws.root, rel.startsWith("/") ? relativeTo(ws.root, rel) : rel);
+  const parts = target.slice(ws.root.length).split("/").filter(Boolean);
+  if (parts.includes(".git")) throw new Refusal("not-granted", "files inside .git are never read or changed");
+  if (!within(target, ws.root)) throw new Refusal("not-granted", `path escapes the workspace: ${rel}`);
+  const real = realpathOrNull(target);
+  if (real && !within(real, ws.root)) throw new Refusal("not-granted", `path resolves outside the workspace: ${rel}`);
+  if (!real) {
+    const parent = realpathOrNull(join(target, ".."));
+    if (parent && !within(parent, ws.root)) throw new Refusal("not-granted", `path resolves outside the workspace: ${rel}`);
+  }
+  return { abs: real ?? target, rel: (real ?? target).slice(ws.root.length + 1), exists: !!real };
+}
+
+function relativeTo(root, abs) {
+  const n = absolute(abs);
+  const real = realpathOrNull(n) ?? (() => {
+    const parent = realpathOrNull(join(n, ".."));
+    return parent ? join(parent, n.slice(n.lastIndexOf("/") + 1)) : n;
+  })();
+  if (!within(real, root)) throw new Refusal("not-granted", `path is outside the workspace: ${abs}`);
+  return real.slice(root.length + 1);
 }
