@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Cortex, defaultHome, operatorActor, VERSION } from "../src/cortex.js";
+import { audit } from "../src/audit.js";
 import { defaultGrant, loadGrant, saveGrant } from "../src/grant.js";
 import { compose, simulate } from "../src/compose.js";
 import { apply } from "../src/apply.js";
@@ -49,7 +50,7 @@ Code:
   workspace [overview|files|read|search|changes] --workspace <dir> [--path p] [--pattern re]
   edit <edit.json>                        a reversible edit (see context_edit)
   undo <change-id>                        put back every file an edit or run changed
-  exec --workspace <dir> <program> [args…]  run a granted program in the workspace
+  exec --workspace <dir> <program> [args…]  run any executable in the workspace, sandboxed
 
 Discovery:
   discover [--limit n] [--refresh] [--formats a,b]   survey every granted program
@@ -61,6 +62,7 @@ Learning:
   artefact <digest> [--as text|base64]    read a stored artefact
   artefacts [--format f] [--origin o]     list stored artefacts
   experiment <spec.json>                  run an experiment (see docs/USAGE.md)
+  audit <spec.json>                       adversarial trials: crashes, silent accepts, hangs
   calibrate <spec.json>                   calibrate a witness
   witnesses                               list witnesses
   claims [--operation id] [--state s] [--kind k] [--property p]
@@ -157,6 +159,8 @@ async function main() {
       return print(await cx.experiment(readSpec(positional[0]), actor));
     case "calibrate":
       return print(await cx.calibrate(readSpec(positional[0]), actor));
+    case "audit":
+      return print(await audit(cx, readSpec(positional[0]), actor));
     case "claims":
       return print(cx.claims({ operation: flags.operation, state: flags.state }));
     case "goal":

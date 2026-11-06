@@ -65,7 +65,7 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   const list = await send("tools/list", {});
   const names = list.result.tools.map((t) => t.name);
   assert.deepEqual(names, [
-    "context_status", "context_environment", "context_manual", "context_apply", "context_workspace", "context_edit", "context_run", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
+    "context_status", "context_environment", "context_manual", "context_apply", "context_workspace", "context_edit", "context_run", "context_audit", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
     "context_claims", "context_explain", "context_goal", "context_gap", "context_possibilities", "context_simulate",
     "context_compose", "context_crystallize", "context_skill", "context_evolve", "context_transfer", "context_ledger",
   ]);
@@ -77,7 +77,7 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   assert.deepEqual(status.grant.programs, [GZIP]);
 
   const envModel = await ok("context_environment", {});
-  assert.equal(envModel.cortex.tools, 24);
+  assert.equal(envModel.cortex.tools, 25);
   const rules = await ok("context_manual", { topic: "rules" });
   assert.ok(rules.rules.claimStates.established.length >= 3);
   const survey = await ok("context_discover", {});
@@ -93,6 +93,12 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
 
   const d = await ok("context_experiment", { operation: { id: "gzip.decompress", program: GZIP, args: ["-d", "-c", "{in:data}"], inputs: { data: "application/gzip" }, outputs: { stdout: "text/plain" } }, trials: gz.map((g) => ({ inputs: { data: g } })) });
   assert.equal(d.claims.find((x) => x.id === "gzip.decompress:rejects:truncate").state, "established");
+
+  const a = await ok("context_audit", { operation: "gzip.decompress", inputs: { data: gz } });
+  assert.deepEqual(a.findings, [], "gzip refuses every damaged input: the honest null");
+  assert.equal(a.refusals, 12);
+  assert.ok(a.claims.every((c) => c.state === "established" || c.state === "observed"));
+  assert.match(a.coverage.note, /not that the operation is safe/);
 
   const w = await ok("context_witness", { action: "calibrate", witness: { id: "gzip-roundtrip", builtin: "bytes-equal", params: ["original", "compressed"], via: { compressed: "gzip.decompress" } }, references: [{ bind: { original: { text: texts[0] }, compressed: gz[0] } }, { bind: { original: { text: texts[1] }, compressed: gz[1] } }] });
   assert.equal(w.status, "calibrated");

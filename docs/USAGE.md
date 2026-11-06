@@ -161,12 +161,36 @@ The import report lists each step:
 properties proven along each one. With `since` (a ledger sequence number or an ISO time), it also lists
 what became possible after that point.
 
+## Audit an operation
+
+Adversarial trials on an operation you have already learned (or define inline): every known-good
+sample meets every kind of deterministic damage, and a weakness counts only when it reproduces.
+
+```json
+{
+  "operation": "gzip.decompress",
+  "inputs": { "data": ["sha256:<a trial output>", "sha256:<another trial output>"] }
+}
+```
+
+- **Operation:** an id learned earlier, or a definition as in an experiment. Every input of the
+  operation needs at least one known-good source; each source is damaged by each kind while the
+  other inputs take their first source.
+- **Kinds:** all of `truncate`, `corrupt-header`, `flip-middle`, `empty` unless `kinds` narrows them.
+- **Findings:** `crash` (killed by a signal), `silent-accept` (exit 0 with output on damaged input),
+  `hang`, `resource-kill`, `output-flood`. Every candidate is repeated; it counts only when the same
+  class reproduces. Anything else is reported as `unconfirmed`, never silently dropped.
+- **Claims:** the runs feed the same evidence machinery as negative controls. A clean refusal
+  supports `rejects:<damage>`; a run that accepted damaged input contradicts it.
+- **Coverage:** the report names the inputs, kinds and sample counts tried — and says outright that
+  no finding means no reproducible weakness on these samples, not that the operation is safe.
+
 ## CLI equivalents
 
 ```text
 cortex probe /usr/bin/gzip
 cortex experiment spec.json          cortex calibrate witness.json
-cortex claims --operation gzip.compress
+cortex audit audit.json              cortex claims --operation gzip.compress
 cortex crystallize skill.json        cortex run gzip-verified --in text=/samples/new.txt --deliver /out/x.gz
 cortex goal --have text/plain --want application/gzip --preserve bytes
 cortex possibilities --since 120
@@ -182,6 +206,7 @@ cortex ledger verify
 | `context_probe` | `{"program": "/usr/bin/gzip"}` |
 | `context_artefact` | `{"action": "get", "digest": "sha256:…"}`, `{"action": "list", "format": "text/plain"}`, `{"action": "mutate", "digest": "sha256:…", "kind": "truncate"}` |
 | `context_witness` | `{"action": "calibrate", "witness": {…}, "references": [{"bind": {…}}]}`, `{"action": "list"}` |
+| `context_audit` | `{"operation": "gzip.decompress", "inputs": {"data": ["sha256:…", "sha256:…"]}}` |
 | `context_claims` | `{"operation": "gzip.compress", "state": "observed"}` |
 | `context_explain` | `{"claim": "gzip.compress:lossless"}`, `{"operation": "gzip.decompress"}`, `{"entry": 42}` |
 | `context_gap` | `{"have": "application/gzip", "want": "text/plain", "preserve": ["bytes"]}`. Submit each draft's `first` then `then` |

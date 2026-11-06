@@ -2,7 +2,7 @@
 
 **An AI's experience with software, turned into abilities it can prove and pass on.**
 
-Context Cortex is an MCP server and a command line (`cortex`). Through twenty-four `context_*` tools, any
+Context Cortex is an MCP server and a command line (`cortex`). Through twenty-five `context_*` tools, any
 model can understand the machine it is on, act on real code, and learn what the programs there actually
 do by running bounded experiments in a sandbox:
 
@@ -36,7 +36,8 @@ reliably do keeps growing.
 
   `context_manual` states the rules its own code enforces.
 - **It acts on real code.** In workspaces the operator grants, it reads and searches code, makes
-  digest-checked edits, and runs the project's own tests and builds (`context_run`). Every edit and
+  digest-checked edits, and runs any executable that work needs — the project's tests and builds,
+  npm, git, make (`context_run`). Every edit and
   every file a run touches is in the ledger with its diff and can be undone.
 - **It acts on what you ask.** `cortex do "fix the failing tests in ~/src/app"` hands the request to an
   agent primed with the environment model and the rules, restricted to Cortex's tools. Afterwards the
@@ -102,7 +103,7 @@ Or connect any MCP client and give the model a goal, not a tool list:
 > Using Context Cortex, find out what /usr/bin/gzip can do, prove which operations are lossless, and
 > save a skill another agent can use to compress text with a verified round trip.
 
-## The twenty-four tools
+## The twenty-five tools
 
 Every tool the proposal named exists as its own tool, plus the ones an AI needs to understand its
 environment, act on code, and use the rest without a shell.
@@ -113,7 +114,8 @@ environment, act on code, and use the rest without a shell.
 | `context_manual` | The rules its code enforces: tools, claim states, witnesses, skills, transfer, formats, sources and sandbox policy |
 | `context_workspace` | Real code: an overview of each granted workspace, plus files, read (with digest), search, and every change Cortex made there with diffs |
 | `context_edit` | Reversible edits: exact-string replace, whole content or delete, refused if the file changed since it was read; `undo` puts back any edit or run |
-| `context_run` | The project's own tests, builds, linters or tools, run in the workspace with everything else confined. Every file it changed is reported and undoable |
+| `context_run` | Any executable — the project's tests, builds, linters, npm, git — run in the workspace with everything else confined. Every file it changed is reported and undoable |
+| `context_audit` | Adversarial trials: every known-good sample against every kind of damage, each finding reproduced before it counts, clean refusals feeding `rejects:<damage>` claims, and an honest statement of what was not tested |
 | `context_apply` | A skill run over every matching file in a directory, each output checked and delivered, never overwriting |
 | `context_status` | The grant, the sandbox, counts of operations, claims by state, witnesses and skills, and ledger integrity |
 | `context_discover` | A survey of every granted program, with no task needed. Each is probed, sandboxed, for what it says it is and which formats it mentions; unchanged programs are not re-probed |
@@ -177,7 +179,7 @@ file and write outside its sandbox (it can do both when the sandbox is off, and 
 
 ## Status
 
-**v0.3.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 49 tests and
+**v0.3.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 56 tests and
 17 schema checks. One of the tests is a real MCP client session over stdio that drives every tool. CI
 runs the suite on macOS and on Linux with bubblewrap.
 

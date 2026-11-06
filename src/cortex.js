@@ -837,6 +837,15 @@ export class Cortex {
     return touched;
   }
 
+  /**
+   * Feed adversarial audit runs into the engine's claim machinery. The runs are judged exactly
+   * like negative controls: a refused damaged input supports rejects:<damage>, an accepted one
+   * (exit 0, output produced) refutes it. Called inside mutate.
+   */
+  recordAuditRuns(s, opRec, controlResults, actor, auditId) {
+    return this.#updateClaims(s, opRec, { results: [], trials: [], controlResults, hypotheses: [], judgements: [], actor, experimentId: auditId });
+  }
+
   /** Decide a claim's state from its evidence. The only place a state is set. */
   decide(s, c, opRec = s.operations[c.claim.operation]) {
     const reasons = [];
@@ -905,6 +914,7 @@ function summariseEntry(e) {
   if (e.kind === "skill") return `skill ${b.skill}: ${b.status}`;
   if (e.kind === "skill-run") return `run of ${b.skill}: ${b.status}`;
   if (e.kind === "grant") return `grant ${b.change} ${b.path ?? ""}`.trim();
+  if (e.kind === "audit") return `audit of ${b.operation}: ${b.findings?.length ?? 0} finding(s) (${(b.findings ?? []).map((f) => f.class).join(", ") || "none"}), ${b.refusals ?? 0} clean refusal(s)`;
   return Object.keys(b).slice(0, 4).join(", ");
 }
 
