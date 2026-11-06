@@ -130,19 +130,33 @@ file and write outside its sandbox (it can do both when the sandbox is off, and 
 
 ## Status
 
-**v0.2.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 37 tests and
+**v0.2.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 38 tests and
 17 schema checks. One of the tests is a real MCP client session that drives all eighteen tools over
 stdio. CI runs the suite on macOS and on Linux with bubblewrap.
 
-**A real agent run (6 November 2026, development evidence).** A fresh Claude Code session was given
-only the MCP tools, with no shell, and a program the tests never use (`zstd`).
-- **Turns and cost:** 19 turns, 115 s, $0.85.
-- **What it did:** it probed zstd, established compress and decompress, calibrated a round-trip
-  witness, and crystallised an established skill.
-- **Delivery:** the skill delivered a file that the real `zstd -d` decompresses to the original.
-- **What it caught:** two contradictions (the compressor accepts damaged input, which is correct for a
-  compressor) and a bug in the engine, where unrecognised binary got past a `text/plain` input check. The
-  bug is fixed and has a regression test.
+### Real agent runs (6 November 2026, development evidence)
+
+In each run, a fresh headless Claude Code session had only the Context Cortex MCP tools: no shell and
+no file tools. Every delivered file was then checked outside Cortex with the real decompressor.
+
+| Run | Given | What the agent did on its own | Cost |
+|---|---|---|---|
+| 1 (6 tools) | `zstd`, which the tests never use, and a goal | Probed it, established compress and decompress, calibrated a round-trip witness, and built an established skill. The delivered file decompresses with the real `zstd` to the original. | 19 turns, 115 s, $0.85 |
+| 2 (18 tools) | A directory of six compressors it was not told about, and "give this machine as many verified lossless text-compression abilities as you can" | Discovered gzip, bzip2, xz, zstd, lz4 and brotli, and established six skills, each re-checking the round trip on every run. All six delivered files decompress to the original. | 53 turns, 246 s, $1.40 |
+
+What the runs exposed was as useful as what they built:
+
+- **An engine bug (run 1).** Unrecognised binary got past a `text/plain` input check. It is fixed and
+  has a regression test.
+- **Software that cannot be trusted to refuse (run 1).** The compressor accepts damaged input. That is
+  correct behaviour for a compressor, and it was recorded as a contradicted claim.
+- **A checker too weak for its job (run 2).** `brotli -t` failed calibration because it accepts a
+  stream with one byte flipped: Brotli has no checksum. The agent did not trust it, and relied on the
+  decompress-and-compare witness, which does catch the flip.
+- **Formats the detector cannot see (run 2).** Brotli has no signature, so its decompressor's
+  `accepts` claim stays `observed`. The agent reported this instead of claiming it.
+
+These are development runs by the builder, not an independent evaluation.
 
 Not yet built, and not claimed:
 
