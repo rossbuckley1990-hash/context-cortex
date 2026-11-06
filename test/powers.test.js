@@ -136,3 +136,20 @@ test("the ledger lists entries by kind and stays intact", () => {
 test("decompress op helper stays consistent", () => {
   assert.equal(decompressOp.outputs.stdout, "text/plain");
 });
+
+test("a format the detector does not know is established through a calibrated format witness", async () => {
+  const e3 = environment();
+  const c3 = await open(e3);
+  const op = { id: "gzip.custom", program: GZIP, args: ["-n", "-c", "{in:data}"], inputs: { data: "text/plain" }, outputs: { stdout: "application/x-custom-container" } };
+  const a = { path: join(e3.samples, "a.txt") }, b = { path: join(e3.samples, "b.txt") };
+  const first = await c3.experiment({ operation: op, trials: [{ inputs: { data: a } }, { inputs: { data: b } }], controls: false }, ACTOR);
+  const produces = first.claims.find((c) => c.id === "gzip.custom:produces:stdout");
+  assert.equal(produces.state, "observed");
+  assert.match(produces.reasons.join(" "), /cannot confirm/);
+  const outs = first.trials.map((t) => t.outputs.stdout.digest);
+  const w = await c3.calibrate({ witness: { id: "custom-container", program: GZIP, args: ["-t", "{param:candidate}"], params: ["candidate"], accept: { exit: 0 } }, references: outs.map((d) => ({ bind: { candidate: d } })) }, ACTOR);
+  assert.equal(w.status, "calibrated", JSON.stringify(w.failures));
+  const second = await c3.experiment({ operation: op, trials: [{ inputs: { data: a } }, { inputs: { data: b } }], controls: false, hypotheses: [{ id: "container", kind: "effect", text: "the output is a valid container", property: "output.stdout.format", value: "application/x-custom-container", check: { witness: "custom-container", bind: { candidate: "output.stdout" } } }] }, ACTOR);
+  assert.equal(second.claims.find((c) => c.id === "gzip.custom:container").state, "established");
+  assert.equal(c3.claims({ operation: "gzip.custom" }).find((c) => c.id === "gzip.custom:produces:stdout").state, "established");
+});

@@ -838,7 +838,13 @@ export class Cortex {
       if (!cur.ok) reasons.push(cur.reason);
       else witness = this.witnessRef(w);
     }
-    if (c.meta.unconfirmable) reasons.push(`the built-in detector cannot confirm this format; add a hypothesis checked by a format witness`);
+    if (c.meta.unconfirmable) {
+      // A format the built-in detector does not know can still be established: by an established
+      // hypothesis about the same port's format, judged by a calibrated format witness.
+      const backer = Object.values(s.claims).find((o) => o !== c && o.claim.operation === c.claim.operation && o.claim.statement.property === c.claim.statement.property && o.meta.judge && o.meta.judge !== "builtin:format-detector" && !o.meta.unconfirmable && this.decide(s, o, opRec).state === "established");
+      if (backer) witness = this.witnessRef(this.witnessRecord(s, backer.meta.judge));
+      else reasons.push(`the built-in detector cannot confirm ${c.claim.statement.value}; establish a hypothesis with property "${c.claim.statement.property}" checked by a calibrated format witness`);
+    }
     if (c.claim.kind !== "failure") {
       const checks = (opRec.determinism ?? []).filter((d) => d.pinDigest === c.meta.pin);
       if (!checks.length) reasons.push("determinism not yet checked");

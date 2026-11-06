@@ -23,6 +23,7 @@ const SIGNATURES = [
   ["application/x-bzip2", (b) => at(b, 0, ascii("BZh"))],
   ["application/x-xz", (b) => at(b, 0, Buffer.from([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00]))],
   ["application/zstd", (b) => at(b, 0, Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))],
+  ["application/x-lz4", (b) => at(b, 0, Buffer.from([0x04, 0x22, 0x4d, 0x18]))],
   ["audio/flac", (b) => at(b, 0, ascii("fLaC"))],
   ["audio/ogg", (b) => at(b, 0, ascii("OggS"))],
   ["audio/mpeg", (b) => at(b, 0, ascii("ID3")) || (b.length >= 2 && b[0] === 0xff && (b[1] & 0xe0) === 0xe0)],
@@ -35,6 +36,7 @@ const EXTENSIONS = {
   "image/x-portable-pixmap": ".ppm", "image/x-portable-graymap": ".pgm", "audio/wav": ".wav", "audio/flac": ".flac",
   "audio/ogg": ".ogg", "audio/mpeg": ".mp3", "video/mp4": ".mp4", "application/pdf": ".pdf", "application/zip": ".zip",
   "application/gzip": ".gz", "application/x-bzip2": ".bz2", "application/x-xz": ".xz", "application/zstd": ".zst",
+  "application/x-lz4": ".lz4", "application/x-brotli": ".br",
   "text/plain": ".txt", "application/json": ".json", "text/csv": ".csv",
 };
 
