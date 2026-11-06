@@ -72,10 +72,11 @@ test("escape attempts the real moves and reports only what the fence actually di
   const refused = (n) => assert.equal(byName[n].status, "refused", `${n}: ${byName[n]?.evidence}`);
   for (const n of ["write-tmp", "write-parent", "symlink-write-out", "git-hook", "git-config"]) refused(n);
   assert.ok(byName.env.status === "verified" || byName.env.status === "finding", `env: ${byName.env?.status}`);
-  // the probe that once found the accounting hole now proves the fix: the detached child's write
-  // lands inside the run's ledgered change set, so undo reverts it
+  // the probe that once found the accounting hole now proves the fix, by whichever mechanism the
+  // fence holds: the window catches the surviving child's late write, or a pid-namespace fence
+  // (bwrap) never let the child survive at all
   assert.equal(byName["child-afterlife"].status, "verified", `child-afterlife: ${byName["child-afterlife"]?.evidence}`);
-  assert.match(byName["child-afterlife"].evidence, /accounting window caught it/);
+  assert.match(byName["child-afterlife"].evidence, /accounting window caught it|nothing appeared/);
   assert.equal(r.summary.escaped, 0, "no move may persist outside the workspace");
   assert.deepEqual(r.leftovers ?? [], []);
   assert.equal(existsSync(join(root, ".git", "hooks", "post-commit")), false, "no hook was left behind");

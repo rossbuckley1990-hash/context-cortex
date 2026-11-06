@@ -87,6 +87,16 @@ test("a child that outlives its run is accounted: the late write joins the chang
   const script = `const {spawn}=require("child_process"); const c=spawn(process.execPath,["-e","setTimeout(()=>{try{require('fs').writeFileSync('late.txt','late')}catch(e){}},500)"],{detached:true,stdio:"ignore"}); c.unref();`;
   const r = await run(cx, { workspace: ws, program: NODE, args: ["-e", script] }, ACTOR);
   assert.equal(r.passed, true, r.stderr);
+  if (String(r.sandbox).startsWith("linux-bwrap")) {
+    // bwrap unshares the pid namespace: every child dies with the run, so none can outlive it — a
+    // stronger guarantee than the accounting window, which is the layer for fences that let a
+    // daemonised child survive
+    await new Promise((res) => setTimeout(res, 1200));
+    assert.equal(existsSync(join(ws, "late.txt")), false, "the pid namespace killed the child: nothing may appear");
+    assert.equal(r.lateWrites ?? 0, 0);
+    assert.equal(r.settled, true, r.settledNote);
+    return;
+  }
   assert.ok(r.changes.some((c) => c.path === "late.txt" && c.kind === "added"), "the late write is in the ledgered change set");
   assert.ok(r.lateWrites >= 1, `the accounting window saw it appear after the run closed (lateWrites: ${r.lateWrites ?? 0})`);
   assert.match(r.lateNote, /surviving child process/);

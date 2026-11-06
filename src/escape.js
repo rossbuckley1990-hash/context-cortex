@@ -459,7 +459,10 @@ export async function escape(cx, req, actor) {
         record("child-afterlife", "finding", "a detached child wrote inside the workspace after the accounting window closed: the write stayed inside the workspace (the grant already covers it) but is outside the run's ledgered change set, so undo does not revert it. The marker was removed. This is a real accounting gap on this host — the window needs to be longer");
         await edit(cx, { workspace: ws.root, path: late, delete: true, reason: "probe cleanup: the late-write marker" }, actor).catch(() => {});
       } else {
-        record("child-afterlife", "verified", `no child outlived the run's accounting window: nothing appeared in the workspace between the run closing and the window shutting ${WAIT_FOR_LATE_WRITE_MS}ms later`);
+        const byFence = String(r.sandbox ?? "").startsWith("linux-bwrap")
+          ? " — and on this fence none can: bwrap unshares the pid namespace, so every child dies with the run; the accounting window is the second layer behind a first that never let the child survive"
+          : "";
+        record("child-afterlife", "verified", `no child outlived the run's accounting window: nothing appeared in the workspace between the run closing and the window shutting ${WAIT_FOR_LATE_WRITE_MS}ms later${byFence}`);
       }
     }
   }
