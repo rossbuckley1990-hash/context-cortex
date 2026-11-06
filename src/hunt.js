@@ -253,8 +253,9 @@ async function driveFinding(cx, ws, f, seq, actor) {
     let proof = false;
     if (f.drive === "write") {
       // The write targets a path outside the workspace: the sandbox must refuse it, so the proof
-      // is the refusal itself, naming the attacker's marker.
-      proof = (p.marker ? err.includes(p.marker) : true) && /EACCES|EPERM|permission denied/i.test(err);
+      // is the refusal itself, naming the attacker's marker. sandbox-exec reports EACCES/EPERM;
+      // bubblewrap mounts the rootfs read-only and reports EROFS.
+      proof = (p.marker ? err.includes(p.marker) : true) && /EACCES|EPERM|EROFS|permission denied|read-only file system/i.test(err);
     } else if (p.marker) {
       proof = r.changes.some((c) => c.path === p.marker && (c.kind === "added" || c.kind === "changed"));
     } else if (f.drive === "read") {
@@ -269,7 +270,7 @@ async function driveFinding(cx, ws, f, seq, actor) {
       status: f.drive === "write" ? "contained-by-sandbox" : "exploited",
       payload: p,
       evidence: f.drive === "write"
-        ? "the code followed the attacker's path to a write outside the workspace and the sandbox refused it (EACCES/EPERM), on both runs; unconfined this is an arbitrary file write"
+        ? "the code followed the attacker's path to a write outside the workspace and the sandbox refused it (EACCES, EPERM or a read-only root), on both runs; unconfined this is an arbitrary file write"
         : p.proves + ", on both runs",
       runs,
       note: "each drive ran the real code twice inside the sandbox; every file change was undone",
