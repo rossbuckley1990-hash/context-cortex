@@ -14,8 +14,23 @@ import { canonical, digestOf, ensureDir, isObject, now, Refusal, requireId, requ
 
 export const VERSION = "0.2.0";
 const TOKEN = /\{(in|out|param):([A-Za-z0-9_-]+)\}/g;
-const CLAIM_KINDS = ["precondition", "effect", "preservation", "authority", "failure", "composability", "substitute"];
-const DEFAULT_CONTROLS = { kinds: ["truncate", "corrupt-header"], limit: 2 };
+export const CLAIM_KINDS = ["precondition", "effect", "preservation", "authority", "failure", "composability", "substitute"];
+export const DEFAULT_CONTROLS = { kinds: ["truncate", "corrupt-header"], limit: 2 };
+/** The rules decide() applies, stated for the manual. Keep in step with decide(). */
+export const PROMOTION_RULES = {
+  stale: "the program's current digest differs from the one the evidence was gathered with (or it is missing or no longer granted)",
+  contradicted: "at least one trial refutes the claim",
+  hypothesised: "no trial supports it yet (or its witness is not calibrated, so nothing was judged)",
+  observed: "supported, but a rule below does not hold yet; the reasons are listed on the claim",
+  established: [
+    "at least two distinct inputs support it and nothing refutes it",
+    "for every kind except failure: one trial was repeated and its outputs were identical (determinism)",
+    "if a witness judges it, the witness is calibrated against its current program and via-operations",
+    "for a format the built-in detector does not know: an established hypothesis on the same port's format, judged by a calibrated format witness, backs it",
+    "failure claims (rejects:<damage>): at least two damaged copies of distinct inputs were all refused",
+  ],
+  promotionRules: { failure: "failure/two-distinct-controls", judged: "two-distinct-inputs/deterministic/calibrated-witness", unjudged: "two-distinct-inputs/deterministic" },
+};
 const FORMAT_WORDS = [
   [/\bpng\b/i, "image/png"], [/\bjpe?g\b/i, "image/jpeg"], [/\bgif\b/i, "image/gif"], [/\bwebp\b/i, "image/webp"],
   [/\bavif\b/i, "image/avif"], [/\bhei[cf]\b/i, "image/heic"], [/\btiff?\b/i, "image/tiff"], [/\bbmp\b/i, "image/bmp"],

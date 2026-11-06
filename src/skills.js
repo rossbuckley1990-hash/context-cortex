@@ -229,11 +229,11 @@ export async function runSkill(cx, id, inputs, { deliver } = {}) {
     const resolved = {};
     for (const n of Object.keys(k.definition.inputs)) resolved[n] = cx.resolveSource(inputs?.[n], `inputs.${n}`).digest;
     const r = await execute(cx, s, k.definition, resolved);
-    cx.ledger.append("skill-run", { skill: id, revision: k.revision, inputs: resolved, status: r.status, output: r.output?.digest ?? null });
     if (r.status === "completed" && target) {
       copyFileSync(cx.artefacts.path(r.output.digest), target);
       r.delivered = target;
     }
+    cx.ledger.append("skill-run", { skill: id, revision: k.revision, inputs: resolved, status: r.status, output: r.output?.digest ?? null, delivered: r.delivered ?? null });
     return {
       skill: id,
       revision: k.revision,

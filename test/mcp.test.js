@@ -65,7 +65,7 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   const list = await send("tools/list", {});
   const names = list.result.tools.map((t) => t.name);
   assert.deepEqual(names, [
-    "context_status", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
+    "context_status", "context_environment", "context_manual", "context_apply", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
     "context_claims", "context_explain", "context_goal", "context_gap", "context_possibilities", "context_simulate",
     "context_compose", "context_crystallize", "context_skill", "context_evolve", "context_transfer", "context_ledger",
   ]);
@@ -76,6 +76,10 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   assert.notEqual(status.ledger.intact, false);
   assert.deepEqual(status.grant.programs, [GZIP]);
 
+  const envModel = await ok("context_environment", {});
+  assert.equal(envModel.cortex.tools, 21);
+  const rules = await ok("context_manual", { topic: "rules" });
+  assert.ok(rules.rules.claimStates.established.length >= 3);
   const survey = await ok("context_discover", {});
   assert.equal(survey.surveyed, 1);
   const probe = await ok("context_probe", { program: GZIP });
@@ -132,6 +136,8 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   assert.deepEqual(evolved.newlyContradicted, []);
   const poss = await ok("context_possibilities", { since: "1" });
   assert.ok(poss.newlyPossible.length >= 2);
+  const applied = await ok("context_apply", { skill: "gzip-verified", inputs: [{ text: "one\n" }, { text: "two\n" }] });
+  assert.equal(applied.completed, 2);
   const ledger = await ok("context_ledger", { action: "verify" });
   assert.equal(ledger.intact, true);
 

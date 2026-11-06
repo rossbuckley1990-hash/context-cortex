@@ -8,6 +8,16 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Refusal } from "./util.js";
 
+/** What confinement enforces, stated for the environment model and the manual. */
+export const SANDBOX_POLICY = [
+  "no network",
+  "writes only inside a fresh per-run work directory (and /dev/null)",
+  "home directories (/Users, /home, /root) unreadable",
+  "CPU time, file size, wall-clock time and output size limited",
+  "minimal environment: fixed PATH, HOME and TMPDIR set to the work directory, C locale",
+  "nothing runs without a sandbox unless the operator set allowUnsandboxed",
+];
+
 const LIMITS = 'ulimit -t "$CORTEX_CPU" 2>/dev/null; ulimit -f "$CORTEX_FSIZE" 2>/dev/null; exec "$0" "$@"';
 const HOME_ROOTS = ["/Users", "/home", "/root"];
 const PATH_DIRS = ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"];

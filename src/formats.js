@@ -110,3 +110,15 @@ export function mutate(bytes, kind) {
   if (!f) throw new Error(`unknown mutation ${kind}; known: ${Object.keys(MUTATIONS).join(", ")}`);
   return Buffer.from(f(Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes)));
 }
+
+/** Detect from the first bytes of a larger file. A UTF-8 sequence cut at the end is dropped first. */
+export function detectPrefix(bytes, complete) {
+  let b = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  if (!complete) {
+    let end = b.length;
+    while (end > 0 && end > b.length - 4 && (b[end - 1] & 0xc0) === 0x80) end--;
+    if (end > 0 && b[end - 1] >= 0xc0) end--;
+    b = b.subarray(0, end);
+  }
+  return detect(b);
+}

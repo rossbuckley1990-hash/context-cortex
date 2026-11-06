@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 import { Cortex, defaultHome, operatorActor, VERSION } from "../src/cortex.js";
 import { defaultGrant, loadGrant, saveGrant } from "../src/grant.js";
 import { compose, simulate } from "../src/compose.js";
+import { apply } from "../src/apply.js";
+import { runRequest } from "../src/agent.js";
+import { environment, manual } from "../src/environment.js";
 import { evolve } from "../src/evolve.js";
 import { gap, goal } from "../src/goal.js";
 import { serveStdio } from "../src/mcp.js";
@@ -30,6 +33,15 @@ Operator (the only way to change authority):
   grant add-write-root <dir>              allow delivering outputs into a directory
   grant remove <path>                     remove an entry from any list
   grant allow-unsandboxed <true|false>    run without a sandbox (off by default; not recommended)
+
+Requests:
+  do "<request>" [--max-turns n] [--model m] [--dry-run]
+                                          an AI agent carries out the request through Cortex's
+                                          tools only (needs Claude Code; CORTEX_AGENT overrides)
+  environment [--survey]                  everything Cortex can reach and knows, and can do now
+  manual [topic]                          the rules Cortex's code enforces
+  apply --skill id --from <dir> --deliver-to <dir> [--recursive] [--limit n]
+  apply --have t --want t [--preserve a] --from <dir> --deliver-to <dir>
 
 Discovery:
   discover [--limit n] [--refresh] [--formats a,b]   survey every granted program
@@ -143,6 +155,20 @@ async function main() {
       return print(goal(cx, { since: flags.since }));
     case "probe":
       return print(await cx.probe(absolute(resolve(positional[0] ?? ""), "program")));
+    case "do": {
+      const r = await runRequest(cx, positional.join(" "), { maxTurns: flags["max-turns"] ? Number(flags["max-turns"]) : 80, model: flags.model, dryRun: !!flags["dry-run"] });
+      if (flags["dry-run"]) return console.log(r.prompt);
+      console.log(r.report ?? "(no report)");
+      console.error(JSON.stringify({ outcome: r.outcome, isError: r.isError, turns: r.turns, costUsd: r.costUsd, durationS: r.durationS, effects: r.effects, record: r.record }, null, 2));
+      if (r.isError) process.exitCode = 1;
+      return;
+    }
+    case "environment":
+      return print(await environment(cx, { survey: !!flags.survey }));
+    case "manual":
+      return print(await manual(cx, positional[0]));
+    case "apply":
+      return print(await apply(cx, { skill: flags.skill, have: flags.have, want: flags.want, preserve: flags.preserve ? String(flags.preserve).split(",") : [], from: flags.from ? absolute(resolve(flags.from)) : undefined, recursive: !!flags.recursive, deliverTo: flags["deliver-to"] ? absolute(resolve(flags["deliver-to"])) : undefined, limit: flags.limit ? Number(flags.limit) : undefined }, actor));
     case "discover":
       return print(await cx.discover({ limit: flags.limit ? Number(flags.limit) : 25, refresh: !!flags.refresh, formats: flags.formats ? String(flags.formats).split(",") : undefined }));
     case "artefact":
