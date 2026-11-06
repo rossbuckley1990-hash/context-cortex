@@ -3,11 +3,11 @@
 // before and after, so any edit or run can be undone; nothing outside the workspace, and nothing in
 // .git, is ever touched.
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
-import { basename, dirname, extname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { unifiedDiff } from "./diff.js";
 import { detect } from "./formats.js";
-import { grantedProgram, grantedWorkspace, workspaceFile } from "./grant.js";
-import { cleanupWork, newWorkDir, runConfined } from "./sandbox.js";
+import { grantedWorkspace, resolvableProgram, workspaceFile } from "./grant.js";
+import { cleanupWork, newWorkDir, PATH_DIRS, runConfined } from "./sandbox.js";
 import { isObject, now, Refusal, requireString, sha256, writeAtomic } from "./util.js";
 
 const SKIP_DIRS = new Set([".git", "node_modules", ".venv", "venv", "__pycache__", ".tox", ".mypy_cache", ".pytest_cache", "target", ".next", ".cache"]);
@@ -126,11 +126,12 @@ function manifests(root, files) {
   return found;
 }
 
-/** Commands this workspace appears to use, and whether the operator has granted the program. */
+/** Commands this workspace appears to use. Any executable can run inside a granted workspace
+ *  (sandboxed, workspace-scoped), so these are suggestions, not permission checks. */
 function suggestedCommands(cx, ms, files) {
-  const granted = (name) => cx.grantedPrograms().find((p) => basename(p) === name) ?? null;
+  const onPath = (name) => PATH_DIRS.map((d) => join(d, name)).find((p) => existsSync(p)) ?? null;
   const out = [];
-  const add = (purpose, name, args) => out.push({ purpose, program: granted(name), wants: name, args, granted: !!granted(name) });
+  const add = (purpose, name, args) => out.push({ purpose, program: onPath(name), wants: name, args });
   const node = ms.find((m) => m.kind === "node");
   if (node?.scripts?.test) add("test", "npm", ["test"]);
   if (node?.scripts?.build) add("build", "npm", ["run", "build"]);
@@ -306,11 +307,15 @@ function snapshot(cx, ws, index) {
   return { snap, truncated };
 }
 
-/** Run a granted program in the workspace, sandboxed, with the workspace writable. */
+/**
+ * Run any executable inside a granted workspace, sandboxed, with the workspace writable. The
+ * workspace grant is the operator's authorisation for work on that code, so the program list does
+ * not apply here; the sandbox is the containment and the ledger the record.
+ */
 export async function run(cx, req, actor) {
   if (!isObject(req)) throw new Refusal("bad-request", "run takes an object");
   const ws = grantedWorkspace(cx.grant, req.workspace);
-  const { real, given } = grantedProgram(cx.grant, requireString(req.program, "program"));
+  const { real, given } = resolvableProgram(requireString(req.program, "program"));
   const args = Array.isArray(req.args) ? req.args.map(String) : [];
   if (args.length > 128) throw new Refusal("bad-request", "at most 128 arguments");
   const cwd = req.cwd ? workspaceFile(ws, req.cwd).abs : ws.root;

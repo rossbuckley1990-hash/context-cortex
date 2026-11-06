@@ -38,6 +38,20 @@ function forms(path) {
 
 /** A granted program: the path (or a directory containing it) is listed. Returns the resolved file. */
 export function grantedProgram(grant, path) {
+  const { given, real } = resolvableProgram(path);
+  const ok = forms(given).some((f) => grant.programs.some((g) => within(f, g)));
+  if (!ok) throw new Refusal("not-granted", `program is not in the operator's grant: ${given}. The operator can add it with: cortex grant add-program ${given}`);
+  return { given, real };
+}
+
+/**
+ * Any executable file on this machine. Workspace runs use this: a granted workspace is itself the
+ * operator's authorisation to work on that code, so the agent may run whatever the work needs
+ * (node, npm, git, make, the project's own tools). The sandbox, not the program list, is the
+ * containment: writes stay inside the workspace and the run directory, home directories stay
+ * unreadable, and there is no network unless the workspace was granted it.
+ */
+export function resolvableProgram(path) {
   const given = absolute(path, "program");
   const real = realpathOrNull(given);
   if (!real) throw new Refusal("unknown-program", `program does not exist: ${given}`);
@@ -49,8 +63,6 @@ export function grantedProgram(grant, path) {
     /* fall through */
   }
   if (!isFile) throw new Refusal("unknown-program", `not an executable file: ${given}`);
-  const ok = forms(given).some((f) => grant.programs.some((g) => within(f, g)));
-  if (!ok) throw new Refusal("not-granted", `program is not in the operator's grant: ${given}. The operator can add it with: cortex grant add-program ${given}`);
   return { given, real };
 }
 

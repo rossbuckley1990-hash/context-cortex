@@ -2,7 +2,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { changes, edit, overview, read, run, search, undo } from "../src/workspace.js";
 import { ACTOR, environment, grant, open } from "./helpers.js";
 
@@ -33,7 +34,6 @@ test("overview understands the project: git, languages, manifests and its test c
   assert.equal(o.languages.JavaScript, 2);
   assert.deepEqual(o.manifests[0].scripts, { test: "node --test" });
   assert.equal(o.commands[0].wants, "npm");
-  assert.equal(o.commands[0].granted, false, "npm is not granted, and the overview says so");
   assert.ok(!o.topLevel.includes(".git"));
 });
 
@@ -96,5 +96,25 @@ test("nothing outside the workspace, in .git, or through a link out is read or w
   assert.throws(() => read(cx, { workspace: ws, path: "escape-link" }), /outside the workspace/);
   await assert.rejects(edit(cx, { workspace: ws, path: "src/math.js", replace: { old: "a", new: "b" } }, ACTOR), /occurs \d+ times/);
   assert.throws(() => read(cx, { workspace: env.samples, path: "a.txt" }), /not inside a code workspace/);
-  await assert.rejects(run(cx, { workspace: ws, program: "/bin/sh", args: ["-c", "true"] }, ACTOR), /not in the operator's grant/);
+  await assert.rejects(run(cx, { workspace: ws, program: "/bin/definitely-not-a-tool", args: [] }, ACTOR), /does not exist/);
+});
+
+test("any executable runs inside a granted workspace: the grant is the workspace, the sandbox the fence", async () => {
+  const r = await run(cx, { workspace: ws, program: "/bin/sh", args: ["-c", "printf 'shell works\\n' > shell.txt"] }, ACTOR);
+  assert.equal(r.passed, true, r.stderr);
+  assert.ok(r.changes.some((c) => c.path === "shell.txt" && c.kind === "added"));
+  await undo(cx, { change: r.change }, ACTOR);
+  assert.equal(existsSync(join(ws, "shell.txt")), false);
+});
+
+test("a workspace under a home directory is runnable: the sandbox allows the ancestors it must", async () => {
+  // sandbox-exec needs search permission on every component of the workspace path, so the profile
+  // grants metadata — never reads — on those ancestors. This repository lives under a home
+  // directory on macOS dev machines and CI alike, which is exactly the case the rules cover.
+  const repo = realpathSync(join(dirname(fileURLToPath(import.meta.url)), ".."));
+  grant(env, [NODE], { workspaces: [{ path: ws, network: false }, { path: repo, network: false }] });
+  cx.reloadGrant();
+  const r = await run(cx, { workspace: repo, program: NODE, args: ["-e", 'const fs=require("node:fs"); console.log(JSON.parse(fs.readFileSync("package.json","utf8")).name)'] }, ACTOR);
+  assert.equal(r.passed, true, r.stdout + r.stderr);
+  assert.match(r.stdout, /context-cortex/);
 });
