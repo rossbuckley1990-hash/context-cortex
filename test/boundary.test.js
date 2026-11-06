@@ -27,7 +27,7 @@ before(async () => {
   mkdirSync(join(root, "config"), { recursive: true });
   writeFileSync(join(root, ".git", "hooks", "pre-commit"), "#!/bin/sh\necho hook\n");
   writeFileSync(join(root, ".git", "config"), '[core]\n\thooksPath = .husky\n[alias]\n\tco = !git checkout $1\n');
-  writeFileSync(join(root, ".husky", "pre-commit"), "npm test\n");
+  writeFileSync(join(root, ".husky", "pre-commit"), "#!/bin/sh\necho hook-ran\n");
   writeFileSync(join(root, "package.json"), JSON.stringify({ name: "app", scripts: { prepare: "husky", postinstall: "node setup.js", test: "node test.js" }, devDependencies: { husky: "^9" } }));
   writeFileSync(join(root, ".envrc"), "export APP_ENV=dev\n");
   writeFileSync(join(root, ".env"), "STRIPE_API_KEY=fake_test_51Helloworlditworks00000\n");
@@ -46,6 +46,12 @@ test("reach maps every trigger kind and ties the ledger to what Cortex touched",
   const envrc = r.workspaces[0].triggers.find((t) => t.kind === "direnv");
   assert.equal(envrc.cortexTouched.change.slice(0, 5), "edit-");
   assert.equal(r.workspaces[0].cortexTouched.length, 1);
+  // the attacker's question answered per trigger: who controls the file that fires
+  const shipped = r.workspaces[0].triggers.find((t) => t.kind === "npm-lifecycle");
+  assert.match(shipped.controlledBy, /the code you cloned/);
+  for (const t of r.workspaces[0].triggers) assert.ok(t.controlledBy, `${t.kind} carries who controls it`);
+  const localGit = r.workspaces[0].triggers.find((t) => t.kind === "git-alias-shell");
+  assert.match(localGit.controlledBy, /your local git configuration/);
   // the hooksPath redirect means git's own hooks directory is inert — the map must say so
   const hooksPath = r.workspaces[0].triggers.find((t) => t.kind === "git-config-hooksPath");
   assert.match(hooksPath.detail, /hooksPath = \.husky/);
@@ -99,6 +105,13 @@ test("gates measures the host's own gates or says honestly it cannot", async () 
   assert.ok(Array.isArray(r.suid.examples));
   assert.ok(["macos-sandbox-exec", "linux-bwrap", "none"].includes(r.fence.state), `the fence states itself: ${r.fence.state}`);
   assert.ok(r.fence.policy.length >= 5);
+  // the target is the host itself: with no workspace the same probe runs through the experiment fence
+  const host = await gates(cx, {}, ACTOR);
+  assert.match(host.target, /the host itself/);
+  assert.equal("workspace" in host, false);
+  const byGateHost = Object.fromEntries(host.gates.map((g) => [g.gate, g]));
+  assert.equal(byGateHost.sudo.state, "refused-by-design");
+  assert.ok(host.summary.enforced >= r.summary.enforced, "the host survey sees every gate the staged one does");
 });
 
 test("secrets maps credentials without contents, and reveals only at the operator's terminal", async () => {
@@ -110,6 +123,11 @@ test("secrets maps credentials without contents, and reveals only at the operato
   const dotEnv = r.items.find((i) => i.path === ".env");
   assert.equal(dotEnv.reachableBy, "engine+runs", "a workspace secret is readable by runs");
   assert.ok(dotEnv.digest.startsWith("sha256:"), "items carry digests, never contents");
+  // the read claim is driven, not structural: a sandboxed run read each credential file in the
+  // workspace and hashed the same bytes the scan saw — the exfiltration-enabling read, demonstrated
+  assert.equal(r.summary.provenReadable, r.items.filter((i) => i.scope === "workspace").length, JSON.stringify(r.readDrives));
+  for (const d of r.readDrives) for (const p of d.proofs) assert.equal(p.status, "proven", JSON.stringify(p));
+  assert.match(dotEnv.readProof.note, /any code you run there can do the same/);
   assert.ok(!JSON.stringify(r).includes("fake_test_51Helloworld"), "no content leaked into the report");
   const readRootItem = r.items.find((i) => i.scope === "read-root");
   if (readRootItem) assert.equal(readRootItem.reachableBy, "engine-only");
@@ -131,11 +149,21 @@ test("secrets maps credentials without contents, and reveals only at the operato
   assert.ok(!JSON.stringify(entries).includes("fake_test_51Helloworld"), "the ledger holds the reveal's digest, not the bytes");
 });
 
-test("persist inventories the footholds and proves the grant cannot plant", async () => {
+test("persist inventories the footholds, drives their code, and proves the grant cannot plant", async () => {
   const r = await persist(cx, { workspace: root }, ACTOR);
   // the workspace's own primitives: the husky hook and the postinstall, with their firing events
   assert.ok(r.workspacePrimitives.some((t) => t.kind === "husky-hook" && t.file === ".husky/pre-commit"));
   assert.ok(r.workspacePrimitives.some((t) => t.kind === "npm-lifecycle"));
+  // each primitive driven: its own code executed once, sandboxed, as its mechanism would run it
+  const driven = new Map(r.primitiveDrives.map((d) => [d.kind, d.driven]));
+  const husky = r.primitiveDrives.find((d) => d.kind === "husky-hook");
+  assert.equal(husky.driven.status, "executed", JSON.stringify(husky.driven));
+  assert.equal(husky.driven.exitCode, 0);
+  assert.ok(r.primitiveDrives.some((d) => d.kind === "npm-lifecycle" && d.driven.status.startsWith("executed")), JSON.stringify(r.primitiveDrives.map((d) => [d.kind, d.driven.status])));
+  assert.ok(r.summary.primitivesDriven >= 2);
+  // the drive's file side effects are undone, and its output is never in the report
+  assert.equal(existsSync(join(root, "postinstall.out")), false, "no file the driven script wrote was left behind");
+  assert.ok(!JSON.stringify(r.primitiveDrives).includes("hook-ran"), "a driven trigger's output is never copied into the report");
   // the inert launchd definition in code, labeled as installing nothing by itself
   const plist = r.launchdDefinitions.find((d) => d.label === "com.example.updater");
   assert.ok(plist, "the launchd-shaped plist is found");

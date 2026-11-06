@@ -135,8 +135,12 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   assert.equal(byGate.sudo.state, "refused-by-design");
   assert.ok(gts.fence.policy.length >= 5);
   assert.ok(Array.isArray(gts.suid.examples));
+  // the host itself is a target: no workspace stages the probe through the experiment fence
+  const host = await ok("context_gates", {});
+  assert.match(host.target, /the host itself/);
   const sec = await ok("context_secrets", {});
   assert.ok(Array.isArray(sec.items));
+  assert.ok(Array.isArray(sec.readDrives), "each workspace's credential read-reachability is driven, not assumed");
   assert.equal("reveals" in sec, false, "a model session never receives secret contents");
   const per = await ok("context_persist", { workspace: join(env.root, "recon-ws") });
   assert.equal(per.summary.planted, 0, "no host persistence surface may be plantable");

@@ -16,7 +16,11 @@ import { join } from "node:path";
 import { grantedWorkspace } from "./grant.js";
 import { driveProbe, classifyMove } from "./escape.js";
 import { scanTriggers } from "./reach.js";
+import { run, undo } from "./workspace.js";
 import { isObject, now, Refusal, requireString } from "./util.js";
+
+const DRIVE_MAX = 6;
+const DRIVE_TIMEOUT_MS = 12_000;
 
 const tail = (s, n = 300) => String(s ?? "").slice(-n);
 
@@ -106,6 +110,49 @@ function launchdDefinitions(cx, ws) {
   return found;
 }
 
+/** Prove what each workspace primitive actually is: its code, executed once, sandboxed, the way
+ *  its real mechanism would — npm runs the script line through the shell, git execs the hook file,
+ *  direnv sources the file. Only the exit status and output size are recorded: a trigger's output
+ *  is untrusted and never copied into a report. What this proves is that the code runs; the firing
+ *  event itself (your install, your commit) is what runs it unsandboxed with your authority. */
+async function driveTriggers(cx, ws, triggers, actor) {
+  const out = [];
+  for (const t of triggers.slice(0, DRIVE_MAX)) {
+    const base = { kind: t.kind, file: t.file, fires: t.fires, authority: t.authority, ...(t.controlledBy ? { controlledBy: t.controlledBy } : {}) };
+    let program, args;
+    if (t.kind === "npm-lifecycle") {
+      const m = /^scripts\.([\w-]+) = ([\s\S]*)$/.exec(t.detail ?? "");
+      if (!m) { out.push({ ...base, driven: { status: "not-driven", reason: "the script line could not be read" } }); continue; }
+      program = "/bin/sh"; args = ["-c", m[2]];
+    } else if (t.kind === "git-hook" || t.kind === "husky-hook") {
+      const abs = join(ws.root, t.file);
+      let st = null;
+      try { st = statSync(abs); } catch { /* absent */ }
+      if (!st?.isFile()) { out.push({ ...base, driven: { status: "not-driven", reason: "the hook file is not present" } }); continue; }
+      const executable = !!(st.mode & 0o111);
+      program = executable ? abs : "/bin/sh";
+      args = executable ? [] : [abs];
+    } else if (t.kind === "direnv") {
+      program = "/bin/sh"; args = [join(ws.root, t.file)];
+    } else {
+      out.push({ ...base, driven: { status: "not-driven", reason: "not shell code: its runner (an IDE, a CI service) is not present here, so the mechanism cannot be driven honestly" } });
+      continue;
+    }
+    try {
+      const r = await run(cx, { workspace: ws.root, program, args, timeoutMs: DRIVE_TIMEOUT_MS }, actor);
+      // what the driven trigger's code changed in the workspace is undone, like every probe drive
+      if (r?.change) await undo(cx, { change: r.change }, actor).catch(() => {});
+      const note = r.exitCode === 0
+        ? `the code executed to completion (exit 0${r.stdout?.length ? `, ${r.stdout.length} bytes of output, not reproduced here: a trigger's output is untrusted` : ""}). On the real event ("${t.fires}") the same code runs unsandboxed with your authority`
+        : `the code executed (exit ${r.exitCode} — its own behavior here, possibly expecting the real event's environment). On the real event ("${t.fires}") the same code runs unsandboxed with your authority`;
+      out.push({ ...base, driven: { status: r.exitCode === 0 ? "executed" : "executed-nonzero", exitCode: r.exitCode, note } });
+    } catch (e) {
+      out.push({ ...base, driven: { status: "not-driven", reason: `the drive was refused: ${tail(String(e?.message ?? e), 140)}` } });
+    }
+  }
+  return out;
+}
+
 export async function persist(cx, req, actor) {
   if (!isObject(req)) throw new Refusal("bad-request", "persist takes an object");
   const ws = grantedWorkspace(cx.grant, requireString(req.workspace, "workspace"));
@@ -113,9 +160,11 @@ export async function persist(cx, req, actor) {
   const seq = Math.floor(Math.random() * 1e9);
   const marker = `com.cortex-persist-probe-${seq}.txt`;
 
-  // 1. the workspace's own auto-execution primitives — the firing surfaces reach classifies.
+  // 1. the workspace's own auto-execution primitives — the firing surfaces reach classifies —
+  //    each driven: its code executed once, sandboxed, as its mechanism would run it.
   const triggers = scanTriggers(cx, ws).filter((t) => ["git-hook", "husky-hook", "npm-lifecycle", "direnv", "editor-task"].includes(t.kind));
   const plists = launchdDefinitions(cx, ws);
+  const drives = await driveTriggers(cx, ws, triggers, actor);
 
   // 2. every standard host persistence surface, driven with a real write from inside the fence.
   const list = surfaces();
@@ -167,18 +216,20 @@ export async function persist(cx, req, actor) {
     inventories: surfaceResults.filter((s) => Array.isArray(s.contents)).length,
     workspacePrimitives: triggers.length,
     launchdDefinitions: plists.length,
+    primitivesDriven: drives.filter((d) => d.driven.status.startsWith("executed")).length,
   };
   cx.ledger.append("persist", { workspace: ws.root, at: now(), ...summary, planted: summary.planted, by: actor });
   return {
     workspace: ws.root,
     at: now(),
     workspacePrimitives: triggers.map((t) => ({ kind: t.kind, file: t.file, fires: t.fires, authority: t.authority, fence: t.fence })),
+    primitiveDrives: drives,
     launchdDefinitions: plists,
     hostSurfaces: surfaceResults,
     summary,
     ...(summary.planted ? { critical: `this grant could plant ${summary.planted} host persistence surface(s) — a foothold the fence was supposed to make impossible; each is listed with the marker to remove` } : {}),
     coverage: {
-      method: "the workspace was scanned for auto-execution primitives and launchd-shaped definitions; then every standard host persistence surface was driven with a real marker write from inside the same sandbox every context_run faces, and classified by the fence's answer and what actually persisted on the host",
+      method: "the workspace was scanned for auto-execution primitives and launchd-shaped definitions; each primitive's own code was then executed once, sandboxed, as its real mechanism would run it (npm's script line through the shell, a hook file as git execs it, an envrc as the shell sources it) — exit status recorded, output never copied, since a trigger's output is untrusted; and every standard host persistence surface was driven with a real marker write from inside the same sandbox every context_run faces, classified by the fence's answer and what actually persisted on the host",
       note: "no planted surface means these writes were refused or contained on this host — never that no persistence exists: a surface the fence cannot read says so, and a persistence mechanism this list does not name is invisible to it",
       ...(platform() === "win32" ? { platform: "no persistence battery exists for this platform; nothing was measured and nothing is claimed" } : {}),
     },

@@ -63,12 +63,16 @@ Code:
   repair --workspace <dir> [--file f] [--classes a,b] [--limit n]  fix what recon proved open, with proof
   plan "<requirement>" [--workspace <dir>] [--limit n]   any requirement as grounded, executable steps
 
-The boundary:
-  reach [--workspace <dir>]               the grant graph and every auto-execution trigger in code
-  escape --workspace <dir> [--probes a,b]  prove the fence: attempt the real escape moves
-  gates --workspace <dir>                 the host's defenses, measured or honestly not-measured
+The boundary — for any code you are pointed at, third-party checkouts included:
+  reach [--workspace <dir>]               the grant graph and every auto-execution trigger in code,
+                                         with who controls each trigger file
+  escape --workspace <dir> [--probes a,b]  drive the real escape moves: what code run from the
+                                         workspace could actually do to this host
+  gates [--workspace <dir>]               the host's defenses and the distance to root; with no
+                                         workspace the machine itself is the target
   secrets [--reveal sha256:…,sha256:…]    the credential map; contents only here, per digest
-  persist --workspace <dir>               persistence both sides: what has it, what this grant cannot
+  persist --workspace <dir>               what fires with your authority (each primitive's code
+                                         driven), and proof this grant cannot plant on the host
 
 Discovery:
   discover [--limit n] [--refresh] [--formats a,b]   survey every granted program
@@ -232,7 +236,7 @@ async function main() {
     case "escape":
       return print(await escape(cx, { workspace: absolute(resolve(flags.workspace ?? ".")), probes: flags.probes ? String(flags.probes).split(",").map((s) => s.trim()).filter(Boolean) : undefined }, actor));
     case "gates":
-      return print(await gates(cx, { workspace: absolute(resolve(flags.workspace ?? ".")) }, actor));
+      return print(await gates(cx, { workspace: flags.workspace ? absolute(resolve(flags.workspace)) : undefined }, actor));
     case "secrets":
       return print(await secrets(cx, { reveal: flags.reveal ? String(flags.reveal).split(",").map((s) => s.trim()).filter(Boolean) : undefined }, actor));
     case "persist":

@@ -13,6 +13,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "n
 import { join, relative } from "node:path";
 import { platform } from "node:os";
 import { grantedWorkspace } from "./grant.js";
+import { driveProbe } from "./escape.js";
 import { SECRETS } from "./hunt.js";
 import { isObject, now, Refusal, within } from "./util.js";
 
@@ -134,6 +135,52 @@ function digestFile(abs, size) {
   }
 }
 
+const MAX_DRIVE_FILES = 8;
+
+// The read proof: a sandboxed run reads each credential file the scan found in a workspace and
+// hashes it in-run. This turns "any code run there can read this" from a structural claim into a
+// demonstrated one — the enabling step of credential exfiltration — without ever reporting content.
+const PROBE_READ = `
+const fs = require("fs");
+const crypto = require("crypto");
+const args = JSON.parse(process.argv[2]);
+const out = {};
+for (const rel of args.files) {
+  try {
+    const b = fs.readFileSync(rel);
+    out[rel] = { ok: true, bytes: b.length, digest: "sha256:" + crypto.createHash("sha256").update(b).digest("hex") };
+  } catch (e) { out[rel] = { ok: false, error: String(e && e.message ? e.message : e) }; }
+}
+process.stdout.write(JSON.stringify(out));
+`;
+
+/** Drive the read-reachability claim for one workspace's items: exit statuses and digests only. */
+async function driveReads(cx, wsRoot, wsItems, actor) {
+  const rels = wsItems.map((i) => i.path);
+  const driven = new Map();
+  if (rels.length) {
+    const { r, out, error } = await driveProbe(cx, { root: wsRoot }, {
+      name: "secrets-read",
+      body: PROBE_READ,
+      args: { files: rels.slice(0, MAX_DRIVE_FILES) },
+    }, actor);
+    if (out) for (const [rel, rec] of Object.entries(out)) driven.set(rel, rec);
+    if (!out) return { ran: false, reason: !r ? `the probe could not run: ${String(error ?? "").slice(0, 140)}` : `the probe returned no account (exit ${r.exitCode})` };
+  }
+  const proofs = [];
+  for (const i of wsItems) {
+    const rec = driven.get(i.path);
+    if (!rec) {
+      proofs.push({ path: i.path, digest: i.digest, status: rels.length > MAX_DRIVE_FILES && rels.indexOf(i.path) >= MAX_DRIVE_FILES ? "not-driven (drive cap reached)" : !driven.size && rels.length ? "not-driven" : "not-driven", note: "the read was not demonstrated — this is a structural claim only" });
+      continue;
+    }
+    if (!rec.ok) proofs.push({ path: i.path, digest: i.digest, status: "read-failed", note: `a run could not read it: ${String(rec.error).slice(0, 140)}` });
+    else if (rec.digest !== i.digest) proofs.push({ path: i.path, digest: i.digest, status: "changed-since-scan", note: `a run read ${rec.bytes} bytes whose digest differs from the scan — the file changed between the scan and the drive` });
+    else proofs.push({ path: i.path, digest: i.digest, status: "proven", note: `a sandboxed run in this workspace read this file and hashed the same ${rec.bytes} bytes the scan saw — any code you run there can do the same` });
+  }
+  return { ran: true, proofs };
+}
+
 export async function secrets(cx, req, actor) {
   if (!isObject(req)) throw new Refusal("bad-request", "secrets takes an object");
   const isOperator = actor && actor.kind === "operator";
@@ -164,6 +211,27 @@ export async function secrets(cx, req, actor) {
         ...(reachableBy === "engine+runs" ? { exposure: "any code run in this workspace (tests, builds, its own CLI) reads this file; the fence binds the workspace into every run" } : { exposure: "read roots are never mounted into runs: no sandboxed program sees this file — only the engine's own machinery (digests, samples), which reports digests, not contents" }),
       });
     }
+  }
+
+  // The read proof, one drive per workspace: a sandboxed run reads each credential file found there
+  // and hashes it. The same bytes as the scan saw is the demonstration — any code run in the
+  // workspace can read the credential; exfiltration needs nothing more than this read.
+  const readDrives = [];
+  for (const s of scopes) {
+    if (s.scope !== "workspace" || !s.root) continue;
+    const wsItems = items.filter((i) => i.root === s.root);
+    if (!wsItems.length) continue;
+    const d = await driveReads(cx, s.root, wsItems, actor);
+    const proofs = d.ran ? d.proofs : [{ path: wsItems[0].path, digest: wsItems[0].digest, status: "not-driven", note: `the drive could not run for this workspace: ${d.reason}` }];
+    for (const p of proofs) {
+      const it = wsItems.find((i) => i.path === p.path);
+      if (it && d.ran) it.readProof = p;
+    }
+    readDrives.push({
+      workspace: s.root,
+      ...(s.network ? { network: "this workspace holds the operator's network grant: a run that reads a credential can also carry it off this machine — the read below is the whole exfiltration story" } : {}),
+      proofs,
+    });
   }
 
   // Credential-shaped names in the engine's own environment: names only, never values.
@@ -206,6 +274,7 @@ export async function secrets(cx, req, actor) {
     items: items.length,
     byScope: { workspace: items.filter((i) => i.scope === "workspace").length, readRoot: items.filter((i) => i.scope === "read-root").length },
     runReachable: items.filter((i) => i.reachableBy === "engine+runs").length,
+    provenReadable: readDrives.flatMap((d) => d.proofs).filter((p) => p.status === "proven").length,
     envNames: envNames.length,
     revealed: reveals.length,
     ...(cap.truncated ? { truncated: true, note: "the scan stopped at its file cap; grant smaller roots or clear clutter for the rest" } : {}),
@@ -214,6 +283,7 @@ export async function secrets(cx, req, actor) {
   return {
     at: now(),
     items: items.map((i) => ({ ...i, absolute: undefined, ...(i.contentHits ? { contentHits: i.contentHits } : {}) })),
+    readDrives,
     env: {
       names: envNames,
       note: "these variable names exist in the engine's own environment — names only, values were never read; runs receive only the minimal fixed set (verified by context_escape), so no sandboxed program inherits any of them",
@@ -223,7 +293,7 @@ export async function secrets(cx, req, actor) {
     summary,
     coverage: {
       scanned: cap.files,
-      method: "every file in the granted read roots and workspaces (skipping .git and node_modules) was matched by name rules and content patterns; the digest is over the file's bytes, so the operator can address a reveal to exactly the item they saw",
+      method: "every file in the granted read roots and workspaces (skipping .git and node_modules) was matched by name rules and content patterns; then, for each workspace, a sandboxed run read every credential file found there and hashed it in-run — the read-reachability claim is demonstrated, not structural, and the report still carries digests, never contents; the digest is over the file's bytes, so the operator can address a reveal to exactly the item they saw",
       note: "a credential this scan did not find either is not in the granted roots and workspaces, or does not look like a credential to these patterns — it says nothing about the rest of the host, which no grant covers. .git/config can carry a token in a remote URL and is not opened, by the same rule that keeps it uneditable.",
     },
   };

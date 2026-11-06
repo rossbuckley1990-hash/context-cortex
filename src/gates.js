@@ -6,13 +6,15 @@
 // read from here is reported as unreadable, never guessed. The one defense this tool can state
 // from authority rather than inference is the fence itself: its exact policy, with context_escape
 // as the way to verify each claim by attempting the real moves.
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { grantedWorkspace } from "./grant.js";
-import { detectSandbox, SANDBOX_POLICY } from "./sandbox.js";
+import { detectSandbox, newWorkDir, runConfined, cleanupWork, SANDBOX_POLICY } from "./sandbox.js";
 import { driveProbe } from "./escape.js";
 import { isObject, now, Refusal, requireString } from "./util.js";
+
+const NODE = process.execPath;
 
 const MAX_FILES_PER_DIR = 2000;
 const SUID_DIRS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/opt/homebrew/bin"];
@@ -82,7 +84,10 @@ function pathDirHygiene() {
 
 export async function gates(cx, req, actor) {
   if (!isObject(req)) throw new Refusal("bad-request", "gates takes an object");
-  const ws = grantedWorkspace(cx.grant, requireString(req.workspace, "workspace"));
+  // The target is the host itself; a workspace is only where the probe is staged from. Without one
+  // the same probe runs through the experiment fence — a fresh work directory, no write roots —
+  // which is the same vantage every trial gets.
+  const ws = req.workspace ? grantedWorkspace(cx.grant, requireString(req.workspace, "workspace")) : null;
   const isMac = platform() === "darwin";
   const isLinux = platform() === "linux";
   const out = [];
@@ -105,11 +110,26 @@ export async function gates(cx, req, actor) {
           { name: "ptrace", cmd: ["/bin/cat", "/proc/sys/kernel/yama/ptrace_scope"] },
         ]
       : [];
-  const { r, out: probeOut, error } = await driveProbe(cx, ws, {
-    name: "gates",
-    body: PROBE_HOST_CMD,
-    args: { commands: cmds, timeoutMs: 8000 },
-  }, actor);
+  let r = null, probeOut = null, error = null;
+  if (ws) {
+    ({ r, out: probeOut, error } = await driveProbe(cx, ws, {
+      name: "gates",
+      body: PROBE_HOST_CMD,
+      args: { commands: cmds, timeoutMs: 8000 },
+    }, actor));
+  } else {
+    const work = newWorkDir();
+    writeFileSync(join(work, "cortex-gates-probe.js"), PROBE_HOST_CMD);
+    try {
+      r = await runConfined({ grant: cx.grant, program: NODE, args: [join(work, "cortex-gates-probe.js"), JSON.stringify({ commands: cmds, timeoutMs: 8000 })], work, timeoutMs: 20_000, maxOutputBytes: 1024 * 1024 });
+      try { probeOut = JSON.parse(String(r.stdout ?? "")); } catch { probeOut = null; }
+    } catch (e) {
+      r = null;
+      error = e instanceof Refusal ? e.message : String(e?.message ?? e);
+    } finally {
+      cleanupWork(work);
+    }
+  }
   const results = probeOut ?? {};
   const said = (name) => tail(results[name]?.stdoutHead ?? "", 200);
 
@@ -202,9 +222,9 @@ export async function gates(cx, req, actor) {
     notMeasured: out.filter((g) => g.state === "not-measured").length,
     ...(worldWritable.length ? { worldWritablePathDirs: worldWritable } : {}),
   };
-  cx.ledger.append("gates", { workspace: ws.root, at: now(), ...summary, fence: fence.state, by: actor });
+  cx.ledger.append("gates", { workspace: ws ? ws.root : null, at: now(), ...summary, fence: fence.state, by: actor });
   return {
-    workspace: ws.root,
+    ...(ws ? { workspace: ws.root } : { target: "the host itself — its defenses are the machine's own, not any one workspace's" }),
     at: now(),
     host: { platform: platform(), home: homedir(), sandbox: sb.kind ?? null },
     gates: out,

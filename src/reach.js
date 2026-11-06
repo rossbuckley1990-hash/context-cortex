@@ -70,8 +70,14 @@ function lastTouched(cx, ws, path) {
 export function scanTriggers(cx, ws) {
   const root = ws.root;
   const out = [];
+  // The attacker's question about every trigger: who controls the code that fires? A trigger file
+  // shipped in the tree is whoever you cloned this from; a .git surface is your local machine's own
+  // configuration, which the fence keeps runs from planting into.
+  const SHIPPED = "the code you cloned: anyone who can commit to that repository, a dependency update or a codegen step rewrites this — your consent is given by the install, commit or cd that fires it";
+  const LOCAL_GIT = "your local git configuration, not shipped with the clone — and the fence refuses runs writing it (context_escape proves that)";
   const push = (t) => {
-    if (out.length < MAX_TRIGGERS) out.push(t);
+    if (out.length >= MAX_TRIGGERS) return;
+    out.push({ ...t, controlledBy: t.file.startsWith(".git/") ? LOCAL_GIT : SHIPPED });
   };
   const touched = (path) => lastTouched(cx, ws, path);
   const PROJECT_FENCE = "writable by design — a project file, so every Cortex change to it is ledgered and reversible (context_workspace changes)";
