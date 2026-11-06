@@ -918,6 +918,11 @@ function summariseEntry(e) {
   if (e.kind === "recon") return `recon of ${b.workspace}: ${b.files} file(s), ${b.exploited ?? 0} exploited, ${b.contained ?? 0} contained, ${b.candidates ?? 0} candidate(s), ${b.secrets ?? 0} secret(s)`;
   if (e.kind === "repair") return `repair of ${b.workspace}: ${b.closed ?? 0} closed, ${b.hardened ?? 0} hardened, ${b.reverted ?? 0} reverted, ${b.needsRedesign ?? 0} to redesign`;
   if (e.kind === "plan") return `plan: ${b.steps} step(s) for "${(b.requirement ?? "").slice(0, 60)}"${b.workspace ? ` (${b.workspace})` : ""}`;
+  if (e.kind === "reach") return `reach: ${b.triggers ?? 0} trigger(s) across ${b.workspaces?.length ?? 0} workspace(s), Cortex changed ${b.cortexTouched ?? 0}`;
+  if (e.kind === "escape") return `escape battery of ${b.workspace}: ${b.verified ?? 0} verified, ${b.findings ?? 0} finding(s), ${b.escaped ?? 0} escaped, ${b.unproven ?? 0} unproven`;
+  if (e.kind === "gates") return `gates of ${b.workspace}: ${b.enforced ?? 0} enforced, ${b.disabled ?? 0} disabled, ${b.notMeasured ?? 0} not measured; fence ${b.fence ?? "unknown"}`;
+  if (e.kind === "secrets") return `secrets: ${b.items ?? 0} item(s), ${b.runReachable ?? 0} reachable by runs, ${b.envNames ?? 0} env name(s)${b.revealed?.length ? `, ${b.revealed.length} revealed by the operator` : ""}`;
+  if (e.kind === "persist") return `persist of ${b.workspace}: ${b.cannotPlant ?? 0} surface(s) cannot be planted, ${b.planted ?? 0} planted, ${b.workspacePrimitives ?? 0} workspace primitive(s)`;
   return Object.keys(b).slice(0, 4).join(", ");
 }
 

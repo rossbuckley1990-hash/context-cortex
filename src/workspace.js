@@ -307,6 +307,87 @@ function snapshot(cx, ws, index) {
   return { snap, truncated };
 }
 
+// ───────────────────────── the .git persistence guard ─────────────────────────
+
+const GIT_GUARD_MAX = 512 * 1024;
+
+/** The persistence surfaces a run must never leave changed: non-sample hooks and the config, inside
+ *  the workspace's own .git (a worktree's gitdir lives outside and is fenced off by the sandbox
+ *  instead). Samples are git's own template files and are left alone. */
+function gitGuardFiles(root) {
+  const out = [];
+  try {
+    if (!statSync(join(root, ".git")).isDirectory()) return out;
+    const hooks = join(root, ".git", "hooks");
+    for (const e of readdirSync(hooks)) {
+      if (e.endsWith(".sample")) continue;
+      const p = join(hooks, e);
+      try {
+        const st = statSync(p);
+        if (st.isFile() && st.size <= GIT_GUARD_MAX) out.push(p);
+      } catch { /* unreadable */ }
+    }
+    const config = join(root, ".git", "config");
+    const cs = statSync(config);
+    if (cs.isFile() && cs.size <= GIT_GUARD_MAX) out.push(config);
+  } catch {
+    /* no .git, or not readable */
+  }
+  return out;
+}
+
+/** Read the guarded files' bytes so a run's change to them can be put back. */
+function gitGuardSnapshot(root) {
+  const snap = new Map();
+  for (const p of gitGuardFiles(root)) {
+    try {
+      snap.set(p, readFileSync(p));
+    } catch {
+      /* unreadable */
+    }
+  }
+  return snap;
+}
+
+/** Restore what a run changed under .git: a hook planted or altered, the config rewritten. A file
+ *  the run deleted comes back; a hook that did not exist before is removed. The sandbox denies
+ *  writes to these paths where it can name them; this guard is the belt to that braces. */
+function gitGuardRestore(root, before) {
+  const guarded = [];
+  const seen = new Set();
+  for (const p of gitGuardFiles(root)) {
+    seen.add(p);
+    const had = before.get(p);
+    const rel = p.slice(root.length + 1);
+    if (had === undefined) {
+      rmSync(p, { force: true });
+      guarded.push({ path: rel, action: "removed (it did not exist before the run)" });
+      continue;
+    }
+    let now = null;
+    try {
+      now = readFileSync(p);
+    } catch {
+      /* deleted */
+    }
+    if (now === null || !now.equals(had)) {
+      writeAtomic(p, had);
+      guarded.push({ path: rel, action: "restored" });
+    }
+  }
+  for (const [p, had] of before) {
+    if (!seen.has(p)) {
+      try {
+        writeAtomic(p, had);
+        guarded.push({ path: p.slice(root.length + 1), action: "restored" });
+      } catch {
+        /* outside the workspace (a worktree): fenced off by the sandbox instead */
+      }
+    }
+  }
+  return guarded;
+}
+
 /**
  * Run any executable inside a granted workspace, sandboxed, with the workspace writable. The
  * workspace grant is the operator's authorisation for work on that code, so the program list does
@@ -322,6 +403,7 @@ export async function run(cx, req, actor) {
   return cx.state.mutate(async (s) => {
     s.workspaceIndex = s.workspaceIndex ?? {};
     const before = snapshot(cx, ws, s.workspaceIndex[ws.root]);
+    const gitBefore = gitGuardSnapshot(ws.root);
     const work = newWorkDir();
     let r;
     try {
@@ -331,6 +413,7 @@ export async function run(cx, req, actor) {
     }
     const after = snapshot(cx, ws, Object.fromEntries(before.snap));
     s.workspaceIndex[ws.root] = Object.fromEntries(after.snap);
+    const gitGuarded = gitGuardRestore(ws.root, gitBefore);
     const changes = [];
     for (const [rel, a] of after.snap) {
       const b = before.snap.get(rel);
@@ -343,10 +426,11 @@ export async function run(cx, req, actor) {
       return t.length > 8000 ? `…${t.slice(-8000)}` : t;
     };
     const pin = sha256(readFileSync(real));
-    const ref = cx.ledger.append("workspace-run", { workspace: ws.root, by: actor, program: { path: given, digest: pin }, args, cwd: cwd.slice(ws.root.length + 1) || ".", exitCode: r.exitCode, timedOut: r.timedOut, network: ws.network, sandbox: r.sandbox, durationMs: r.durationMs, changes });
+    const ref = cx.ledger.append("workspace-run", { workspace: ws.root, by: actor, program: { path: given, digest: pin }, args, cwd: cwd.slice(ws.root.length + 1) || ".", exitCode: r.exitCode, timedOut: r.timedOut, network: ws.network, sandbox: r.sandbox, durationMs: r.durationMs, changes, ...(gitGuarded.length ? { gitGuarded } : {}) });
     return {
       change: changes.length ? ref.trial : null, run: ref.trial, exitCode: r.exitCode, ...(r.timedOut ? { timedOut: true } : {}), passed: r.exitCode === 0 && !r.timedOut,
       durationMs: r.durationMs, sandbox: r.sandbox, network: ws.network, stdout: tail(r.stdout), stderr: tail(r.stderr), changes,
+      ...(gitGuarded.length ? { gitGuarded, gitNote: "the run tried to change .git persistence surfaces (hooks, config); every one was restored or removed — no hook or git-config command a run plants survives it" } : {}),
       note: changes.length ? `the run changed ${changes.length} file(s); undo it with context_edit {action: "undo", change: "${ref.trial}"}` : "the run changed no files",
     };
   });

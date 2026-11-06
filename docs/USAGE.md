@@ -252,6 +252,47 @@ sample meets every kind of deterministic damage, and a weakness counts only when
 - **Honesty:** what is missing is stated as a need (a granted workspace for code work, a program, a
   skill). The plan is ledgered, and each step's outcome — not the plan — decides what is established.
 
+## Know the boundary
+
+Five tools give an AI the attacker's map of its own position — the grant, the fence, the host's
+defenses, the credentials, the persistence surfaces — while keeping the operator's authority out of
+reach. Everything they report is measured or honestly marked not-measured; nothing is guessed.
+
+```json
+{ "workspace": "/home/me/src/app" }
+```
+
+- **`context_reach` — the tripwire map.** The grant's true capability graph: every program, read root,
+  write root, workspace and network grant, separated by who can use what (the engine reads read roots;
+  runs never see them). Inside the granted code, every auto-execution trigger is classified by the
+  event that fires it — a git hook runs on your next commit, an npm script on your next install, a
+  direnv file when the shell starts — and by whose authority it runs with. Every trigger Cortex ever
+  touched is tied to its ledger entry.
+- **`context_escape` — the fence, proven.** Enforcement is verified by attempting the real escape
+  moves, each a ledgered trial: writes aimed at the home directory, `LaunchAgents`, rc files, `/tmp`
+  and the workspace parent; symlinks planted inside and pointed out; reads of home; `.git` hooks and
+  git-config; network sockets; the inherited environment (names only); a detached child outliving its
+  run; and the engine's own guards (`.git` refused to edits, escape paths refused, stale digests
+  refused). Every attempt ends `refused`, `isolated` or `reverted` — or `escaped`, a critical finding
+  with the marker's path. Probes can be narrowed: `{"probes": ["write-git", "env"]}`.
+- **`context_gates` — the defense inventory.** SIP, Gatekeeper, the application firewall, FileVault,
+  Endpoint Security clients, listening sockets, SUID binaries and PATH hygiene (ptrace scope and the
+  LSMs on Linux), each measured with the host's own query commands run inside the fence. A gate the
+  vantage cannot see is `not-measured` with the reason — which is often the control itself working
+  (sudoers is unreadable without root; the fence hides the network tables from a process denied
+  network). The one defense stated from authority is the engine's own fence, with its exact policy.
+- **`context_secrets` — the credential map, not the keys.** Every secret the grant can read —
+  workspace env files, dotfiles inside read roots, in-scope environment names, cloud configs —
+  reported as type, path and digest, with what runs can reach beyond the engine. Contents are shown
+  only by the operator at their own terminal, naming the digest: `cortex secrets --reveal sha256:…`.
+  Over MCP a reveal is refused whatever it asks; every operator reveal is ledgered by digest.
+- **`context_persist` — persistence, both sides.** The inventory: the workspace's own auto-execution
+  primitives with their firing events and owners, and launchd-agent-shaped plists lying inert in
+  code. Then the proof: every standard host persistence surface — LaunchAgents and LaunchDaemons,
+  periodic and cron directories, autostart and systemd unit paths — is driven with a real marker
+  write from inside the fence and classified: `cannot-plant` (refused — proven), `isolated`, `absent`,
+  or `planted`, a critical finding with the cleanup path.
+
 ## CLI equivalents
 
 ```text
@@ -259,6 +300,9 @@ cortex probe /usr/bin/gzip
 cortex experiment spec.json          cortex calibrate witness.json
 cortex audit audit.json              cortex recon --workspace ~/src/app
 cortex repair --workspace ~/src/app  cortex plan "fix the command injection in ~/src/app"
+cortex reach --workspace ~/src/app    cortex escape --workspace ~/src/app
+cortex gates --workspace ~/src/app    cortex persist --workspace ~/src/app
+cortex secrets                       cortex secrets --reveal sha256:…   # operator's terminal only
 cortex claims --operation gzip.compress
 cortex crystallize skill.json        cortex run gzip-verified --in text=/samples/new.txt --deliver /out/x.gz
 cortex goal --have text/plain --want application/gzip --preserve bytes
@@ -279,6 +323,11 @@ cortex ledger verify
 | `context_recon` | `{"workspace": "/home/me/src/app", "driveLimit": 10}` |
 | `context_repair` | `{"workspace": "/home/me/src/app", "limit": 10, "test": {"program": "/usr/bin/node", "args": ["--test"]}}` |
 | `context_plan` | `{"requirement": "find and fix the command injection in the CLI", "workspace": "/home/me/src/app"}` |
+| `context_reach` | `{"workspace": "/home/me/src/app"}` or `{}` for the grant graph alone |
+| `context_escape` | `{"workspace": "/home/me/src/app"}` or `{"workspace": "…", "probes": ["write-git", "env", "symlink-out", "read-home", "network", "child-afterlife"]}` |
+| `context_gates` | `{"workspace": "/home/me/src/app"}` |
+| `context_secrets` | `{}` (contents only via `cortex secrets --reveal sha256:…` at the operator's terminal) |
+| `context_persist` | `{"workspace": "/home/me/src/app"}` |
 | `context_claims` | `{"operation": "gzip.compress", "state": "observed"}` |
 | `context_explain` | `{"claim": "gzip.compress:lossless"}`, `{"operation": "gzip.decompress"}`, `{"entry": 42}` |
 | `context_gap` | `{"have": "application/gzip", "want": "text/plain", "preserve": ["bytes"]}`. Submit each draft's `first` then `then` |

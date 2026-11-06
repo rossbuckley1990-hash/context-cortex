@@ -2,7 +2,7 @@
 
 **An AI's experience with software, turned into abilities it can prove and pass on.**
 
-Context Cortex is an MCP server and a command line (`cortex`). Through twenty-eight `context_*` tools, any
+Context Cortex is an MCP server and a command line (`cortex`). Through thirty-three `context_*` tools, any
 model can understand the machine it is on, act on real code, and learn what the programs there actually
 do by running bounded experiments in a sandbox:
 
@@ -43,6 +43,11 @@ reliably do keeps growing.
 - **It acts on what you ask.** `cortex do "fix the failing tests in ~/src/app"` hands the request to an
   agent primed with the environment model and the rules, restricted to Cortex's tools. Afterwards the
   ledger, not the agent's own account, says what was done.
+- **It knows its own boundary.** `context_reach` maps the grant's true capability graph and every
+  auto-execution trigger in the granted code — the machine's tripwire map. `context_escape` verifies the
+  fence by attempting the real escape moves. `context_gates` inventories the host's defenses, or says
+  honestly it cannot see them. `context_secrets` maps credential reachability without the contents.
+  `context_persist` proves the grant cannot plant a foothold and shows the owner what already has one.
 
 - **It learns programs it was never given a tool for.** Any program the operator grants becomes
   learnable through MCP alone, with no shell needed. The AI reads the usage text (`probe`), defines an
@@ -104,7 +109,7 @@ Or connect any MCP client and give the model a goal, not a tool list:
 > Using Context Cortex, find out what /usr/bin/gzip can do, prove which operations are lossless, and
 > save a skill another agent can use to compress text with a verified round trip.
 
-## The twenty-eight tools
+## The thirty-three tools
 
 Every tool the proposal named exists as its own tool, plus the ones an AI needs to understand its
 environment, act on code, and use the rest without a shell.
@@ -120,6 +125,11 @@ environment, act on code, and use the rest without a shell.
 | `context_recon` | Every way into a granted codebase, and proof where they open: entry points, capabilities, dependencies, secrets in the clear, and function-scoped source→sink taint routes (command injection, eval, traversal, SQL injection, XSS, SSRF, prototype pollution, deserialization). argv-sourced routes are exploit-verified by driving the real code with a payload in the sandbox, twice: a reproduced marker, executed command or out-of-workspace read counts as exploited; a write the sandbox refused is reported as contained. Undoable, ledgered, with its own coverage stated |
 | `context_repair` | Fixes that carry proof: a one-line guard is applied through reversible edits to what recon proved open, then the exact payload is re-driven twice and must not reproduce, a benign input must behave identically (same exit status and output), and the workspace's own tests must not regress — otherwise the fix is reverted byte-exactly and the failed check named. A write only the code now refuses counts as hardened. Routes that cannot be driven, and classes with no honest one-line guard, come back as needs-redesign with the reasoning, never silently skipped |
 | `context_plan` | Any plain-language requirement compiled into grounded, executable `context_*` steps against the real code and state — the files to read, the recon and repair to run, the edits to make, the tests to run — with every step's tool and arguments named from what is true in the workspace, placeholders marked where grounding cannot fill them, and what is missing stated as a need |
+| `context_reach` | The grant's true capability graph — programs, read and write roots, workspaces, network — plus every auto-execution trigger found inside the granted code, classified by the event that fires it and whose authority it runs with. Recon finds entry points; reach classifies who consents to execution. The output is the machine's tripwire map |
+| `context_escape` | The fence verified by attempting the real escape moves: writes aimed at the home directory, LaunchAgents, rc files, `/tmp` and the workspace parent, symlinks planted inside and pointed out, home reads, `.git` hooks and git-config, network, the inherited environment, and a child that outlives its run. Every attempt is a ledgered trial ending refused, isolated or reverted — or escaped: a critical finding with the marker to remove |
+| `context_gates` | The host's defenses inventoried from one process's honest vantage: SIP, Gatekeeper, the application firewall, FileVault, Endpoint Security clients, listening sockets, SUID binaries and PATH hygiene (ptrace scope and the LSMs on Linux), each measured with the host's own query commands inside the fence or marked not-measured with the reason — plus the engine's own fence policy, the one defense stated from authority |
+| `context_secrets` | Credential reachability without the keys: every secret the grant can read — workspace env files, dotfiles in read roots, in-scope environment names, cloud configs — reported as type, path and digest, with what runs can reach beyond the engine. Contents are revealed only by the operator at their own terminal, per item, each reveal ledgered; over MCP a reveal is refused whatever it asks |
+| `context_persist` | Both sides of persistence: the footholds that already exist — workspace auto-execution primitives with their firing events and owners, and launchd-shaped definitions lying inert in code — and proof the grant cannot take one: every standard host persistence surface driven with a real write from inside the fence, classified cannot-plant, isolated or planted |
 | `context_apply` | A skill run over every matching file in a directory, each output checked and delivered, never overwriting |
 | `context_status` | The grant, the sandbox, counts of operations, claims by state, witnesses and skills, and ledger integrity |
 | `context_discover` | A survey of every granted program, with no task needed. Each is probed, sandboxed, for what it says it is and which formats it mentions; unchanged programs are not re-probed |
@@ -183,7 +193,7 @@ file and write outside its sandbox (it can do both when the sandbox is off, and 
 
 ## Status
 
-**v0.3.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 77 tests and
+**v0.3.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 85 tests and
 17 schema checks. One of the tests is a real MCP client session over stdio that drives every tool. CI
 runs the suite on macOS and on Linux with bubblewrap.
 

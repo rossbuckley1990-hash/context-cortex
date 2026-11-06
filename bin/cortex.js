@@ -6,6 +6,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Cortex, defaultHome, operatorActor, VERSION } from "../src/cortex.js";
 import { audit } from "../src/audit.js";
+import { escape } from "../src/escape.js";
+import { gates } from "../src/gates.js";
+import { persist } from "../src/persist.js";
+import { reach } from "../src/reach.js";
+import { secrets } from "../src/secrets.js";
 import { recon } from "../src/hunt.js";
 import { repair } from "../src/repair.js";
 import { plan } from "../src/plan.js";
@@ -57,6 +62,13 @@ Code:
   recon --workspace <dir> [--drive-limit n] every way in: entries, taint routes, exploit-verified
   repair --workspace <dir> [--file f] [--classes a,b] [--limit n]  fix what recon proved open, with proof
   plan "<requirement>" [--workspace <dir>] [--limit n]   any requirement as grounded, executable steps
+
+The boundary:
+  reach [--workspace <dir>]               the grant graph and every auto-execution trigger in code
+  escape --workspace <dir> [--probes a,b]  prove the fence: attempt the real escape moves
+  gates --workspace <dir>                 the host's defenses, measured or honestly not-measured
+  secrets [--reveal sha256:…,sha256:…]    the credential map; contents only here, per digest
+  persist --workspace <dir>               persistence both sides: what has it, what this grant cannot
 
 Discovery:
   discover [--limit n] [--refresh] [--formats a,b]   survey every granted program
@@ -215,6 +227,16 @@ async function main() {
       return print(await repair(cx, { workspace: absolute(resolve(flags.workspace ?? ".")), file: flags.file, classes: flags.classes ? String(flags.classes).split(",").map((s) => s.trim()).filter(Boolean) : undefined, limit: flags.limit ? Number(flags.limit) : undefined }, actor));
     case "plan":
       return print(plan(cx, { requirement: (positional[0] ?? flags.requirement ?? "").toString(), workspace: flags.workspace ? absolute(resolve(flags.workspace)) : undefined, limit: flags.limit ? Number(flags.limit) : undefined }, actor));
+    case "reach":
+      return print(await reach(cx, { workspace: flags.workspace ? absolute(resolve(flags.workspace)) : undefined }, actor));
+    case "escape":
+      return print(await escape(cx, { workspace: absolute(resolve(flags.workspace ?? ".")), probes: flags.probes ? String(flags.probes).split(",").map((s) => s.trim()).filter(Boolean) : undefined }, actor));
+    case "gates":
+      return print(await gates(cx, { workspace: absolute(resolve(flags.workspace ?? ".")) }, actor));
+    case "secrets":
+      return print(await secrets(cx, { reveal: flags.reveal ? String(flags.reveal).split(",").map((s) => s.trim()).filter(Boolean) : undefined }, actor));
+    case "persist":
+      return print(await persist(cx, { workspace: absolute(resolve(flags.workspace ?? ".")) }, actor));
     case "discover":
       return print(await cx.discover({ limit: flags.limit ? Number(flags.limit) : 25, refresh: !!flags.refresh, formats: flags.formats ? String(flags.formats).split(",") : undefined }));
     case "artefact":

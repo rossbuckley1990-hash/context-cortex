@@ -70,7 +70,7 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   const list = await send("tools/list", {});
   const names = list.result.tools.map((t) => t.name);
   assert.deepEqual(names, [
-    "context_status", "context_environment", "context_manual", "context_apply", "context_workspace", "context_edit", "context_run", "context_audit", "context_recon", "context_repair", "context_plan", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
+    "context_status", "context_environment", "context_manual", "context_apply", "context_workspace", "context_edit", "context_run", "context_audit", "context_recon", "context_repair", "context_plan", "context_reach", "context_escape", "context_gates", "context_secrets", "context_persist", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
     "context_claims", "context_explain", "context_goal", "context_gap", "context_possibilities", "context_simulate",
     "context_compose", "context_crystallize", "context_skill", "context_evolve", "context_transfer", "context_ledger",
   ]);
@@ -82,7 +82,7 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   assert.deepEqual(status.grant.programs, [GZIP]);
 
   const envModel = await ok("context_environment", {});
-  assert.equal(envModel.cortex.tools, 28);
+  assert.equal(envModel.cortex.tools, 33);
   const rules = await ok("context_manual", { topic: "rules" });
   assert.ok(rules.rules.claimStates.established.length >= 3);
   const survey = await ok("context_discover", {});
@@ -120,6 +120,28 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   assert.ok(pl.steps.some((s) => s.tool === "context_repair"), JSON.stringify(pl.steps.map((s) => s.tool)));
   assert.deepEqual(pl.intents, ["hunt", "fix"]);
   assert.match(rc.coverage.note, /never that the code is secure/);
+
+  // the boundary tools, over the same session the model gets
+  const rch = await ok("context_reach", { workspace: join(env.root, "recon-ws") });
+  assert.ok(rch.graph.runs.read.some((x) => x.includes("engine only")), "the graph separates what the engine reads from what runs can see");
+  assert.equal(rch.workspaces[0].network, false);
+  assert.ok(Array.isArray(rch.workspaces[0].triggers));
+  const esc = await ok("context_escape", { workspace: join(env.root, "recon-ws"), probes: ["write-outside", "env"] });
+  assert.equal(esc.summary.escaped, 0, JSON.stringify(esc.probes));
+  assert.ok(esc.probes.every((p) => ["refused", "isolated", "verified", "finding"].includes(p.status)), JSON.stringify(esc.probes));
+  assert.deepEqual(esc.leftovers ?? [], []);
+  const gts = await ok("context_gates", { workspace: join(env.root, "recon-ws") });
+  const byGate = Object.fromEntries(gts.gates.map((g) => [g.gate, g]));
+  assert.equal(byGate.sudo.state, "refused-by-design");
+  assert.ok(gts.fence.policy.length >= 5);
+  assert.ok(Array.isArray(gts.suid.examples));
+  const sec = await ok("context_secrets", {});
+  assert.ok(Array.isArray(sec.items));
+  assert.equal("reveals" in sec, false, "a model session never receives secret contents");
+  const per = await ok("context_persist", { workspace: join(env.root, "recon-ws") });
+  assert.equal(per.summary.planted, 0, "no host persistence surface may be plantable");
+  assert.ok(per.hostSurfaces.every((s) => ["cannot-plant", "isolated", "absent", "unproven", "not-measured"].includes(s.status)), JSON.stringify(per.hostSurfaces));
+  assert.ok(per.summary.surfaces >= 7, "the standard battery per platform");
 
   const w = await ok("context_witness", { action: "calibrate", witness: { id: "gzip-roundtrip", builtin: "bytes-equal", params: ["original", "compressed"], via: { compressed: "gzip.decompress" } }, references: [{ bind: { original: { text: texts[0] }, compressed: gz[0] } }, { bind: { original: { text: texts[1] }, compressed: gz[1] } }] });
   assert.equal(w.status, "calibrated");
@@ -188,6 +210,13 @@ test("refusals come back as tool errors, and nothing outside the grant runs", as
   assert.match(editOutside.content[0].text, /not inside a code workspace/);
   const runOutside = await tool("context_run", { workspace: env.samples, program: GZIP, args: ["--version"] });
   assert.equal(runOutside.isError, true);
+  // the operator-only boundary: a model naming any digest is refused, whatever it asks to reveal
+  const reveal = await tool("context_secrets", { reveal: ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] });
+  assert.equal(reveal.isError, true);
+  assert.match(reveal.content[0].text, /operator's own hand/);
+  const escNoWs = await tool("context_escape", {});
+  assert.equal(escNoWs.isError, true);
+  assert.match(escNoWs.content[0].text, /workspace/);
   const unknown = await send("tools/call", { name: "context_grant", arguments: {} });
   assert.equal(unknown.error.code, -32602);
 });

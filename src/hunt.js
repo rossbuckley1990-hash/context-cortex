@@ -21,8 +21,9 @@ export const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
 const TEXT_EXT = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".py", ".html", ".json", ".yml", ".yaml", ".toml", ".sh", ".bash", ".zsh", ".sql", ".env", ".rb", ".php", ".go", ".rs", ".txt", ".md"]);
 const JS_EXT = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"]);
 
-const SECRETS = [
+export const SECRETS = [
   { id: "aws-access-key-id", re: /\bAKIA[0-9A-Z]{16}\b/ },
+  { id: "aws-secret-access-key", re: /\b(?:aws[_-])?secret[_-]?access[_-]?key["']?\s*[:=]\s*["']?[A-Za-z0-9/+=]{30,}/i },
   { id: "github-token", re: /\bgh[pousr]_[A-Za-z0-9]{20,}\b/ },
   { id: "openai-style-api-key", re: /\bsk-[A-Za-z0-9_-]{20,}\b/ },
   { id: "private-key", re: /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/ },

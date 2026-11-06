@@ -12,13 +12,18 @@ import { Refusal } from "./util.js";
 export const SANDBOX_POLICY = [
   "no network (a code workspace may be granted network by the operator)",
   "writes only inside a fresh per-run work directory (and /dev/null), plus the code workspace for context_run",
+  "a code workspace's .git/hooks and .git/config are refused to runs and restored if a run changes them: a hook or git-config command fires with your unsandboxed authority, so no run may leave one behind (git's own objects and refs stay writable)",
   "home directories (/Users, /home, /root) unreadable",
   "CPU time, file size, wall-clock time and output size limited",
   "minimal environment: fixed PATH, HOME and TMPDIR set to the work directory, C locale",
   "nothing runs without a sandbox unless the operator set allowUnsandboxed",
 ];
 
-const LIMITS = 'ulimit -t "$CORTEX_CPU" 2>/dev/null; ulimit -f "$CORTEX_FSIZE" 2>/dev/null; exec "$0" "$@"';
+// The shell wrapper needs ulimit, and a shell always adds its own artifacts: it sets PWD and SHLVL,
+// exports _ for the last command, and re-exports SHLVL even after unset when it execs. None of it
+// is operator data, but the contract is a minimal fixed environment, so the final exec runs through
+// /usr/bin/env, which strips what the shell could not.
+const LIMITS = 'unset PWD SHLVL _ 2>/dev/null; ulimit -t "$CORTEX_CPU" 2>/dev/null; ulimit -f "$CORTEX_FSIZE" 2>/dev/null; exec /usr/bin/env -u SHLVL -u _ "$0" "$@"';
 const HOME_ROOTS = ["/Users", "/home", "/root"];
 const PATH_DIRS = ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 export { PATH_DIRS };
@@ -32,6 +37,20 @@ function ancestors(path) {
   return parts.slice(0, -1).map((_, i) => "/" + parts.slice(0, i + 1).join("/"));
 }
 
+/** The persistence surfaces inside a writable root: a run may write a repository's objects and
+ *  refs (git itself needs that), but must never leave behind a hook or a git-config command — those
+ *  fire with the user's unsandboxed authority on the next commit, push or git invocation. */
+export function gitProtected(writeRoots) {
+  const out = [];
+  for (const r of writeRoots) {
+    const hooks = join(r, ".git", "hooks");
+    const config = join(r, ".git", "config");
+    if (existsSync(hooks)) out.push({ path: hooks, subpath: true });
+    if (existsSync(config)) out.push({ path: config, subpath: false });
+  }
+  return out;
+}
+
 function macProfile(work, readRoots, { writeRoots = [], network = false } = {}) {
   const roots = [...readRoots, ...writeRoots, work];
   return [
@@ -41,6 +60,7 @@ function macProfile(work, readRoots, { writeRoots = [], network = false } = {}) 
     "(deny file-write*)",
     `(allow file-write* (subpath ${sbString(work)}) (literal "/dev/null") (literal "/dev/tty"))`,
     ...writeRoots.map((r) => `(allow file-write* (subpath ${sbString(r)}))`),
+    ...gitProtected(writeRoots).map((p) => `(deny file-write* ${p.subpath ? `(subpath ${sbString(p.path)})` : `(literal ${sbString(p.path)})`})`),
     `(deny file-read* ${HOME_ROOTS.map((h) => `(subpath ${sbString(h)})`).join(" ")})`,
     ...[...new Set(roots.flatMap(ancestors))].map((a) => `(allow file-read-metadata (literal ${sbString(a)}))`),
     `(allow file-read* (subpath ${sbString(work)}))`,
@@ -91,6 +111,7 @@ async function execute({ kind, program, args, work, stdinPath, readRoots = [], w
       bwrap, "--ro-bind", "/", "/", ...HOME_ROOTS.filter(existsSync).flatMap((h) => ["--tmpfs", h]),
       ...roots.filter(existsSync).flatMap((r) => ["--ro-bind", r, r]),
       ...writeRoots.filter(existsSync).flatMap((r) => ["--bind", r, r]),
+      ...gitProtected(writeRoots).flatMap((p) => ["--ro-bind", p.path, p.path]),
       "--bind", dir, dir, "--dev", "/dev", "--proc", "/proc", "--unshare-all", ...(network ? ["--share-net"] : []), "--die-with-parent", "--chdir", cwd ?? dir,
       "/bin/sh", "-c", LIMITS, program, ...args,
     ];
