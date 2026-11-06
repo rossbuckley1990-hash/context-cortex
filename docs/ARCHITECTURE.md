@@ -195,6 +195,9 @@ The proposal's limit is non-negotiable, so it is enforced in the engine, not by 
 - **Unknown effects are worst-case.** A capability whose effects are not established is treated as
   `destructive` for planning and runs only in the sandbox, with no network and an empty writable
   directory. With no sandbox available, it does not run.
+- **Code workspaces are the one place Cortex changes the operator's files.** They are granted
+  explicitly, edited only through digest-checked, ledgered, undoable edits, and run with the workspace
+  writable and network only if granted (added in v0.3.0 at the owner's request).
 - **Experiments are never consequential.** `context_experiment` runs only on samples, fixtures and copies,
   only in the sandbox. No experiment touches a user's real data or a remote system's state.
 - **Breaches invalidate results.** In EXPERIMENT-001 any action outside the grant fails the run, whatever

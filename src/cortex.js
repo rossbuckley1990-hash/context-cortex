@@ -12,7 +12,7 @@ import { cleanupWork, detectSandbox, newWorkDir, runConfined } from "./sandbox.j
 import { State } from "./state.js";
 import { canonical, digestOf, ensureDir, isObject, now, Refusal, requireId, requireString, sha256 } from "./util.js";
 
-export const VERSION = "0.2.0";
+export const VERSION = "0.3.0";
 const TOKEN = /\{(in|out|param):([A-Za-z0-9_-]+)\}/g;
 export const CLAIM_KINDS = ["precondition", "effect", "preservation", "authority", "failure", "composability", "substitute"];
 export const DEFAULT_CONTROLS = { kinds: ["truncate", "corrupt-header"], limit: 2 };

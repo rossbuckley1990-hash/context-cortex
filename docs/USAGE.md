@@ -194,3 +194,44 @@ cortex ledger verify
 `compose` builds success conditions from the witnesses that established each preserved property, and
 re-runs them on every use. Without anything to preserve, it calibrates a `format-is` witness for the
 wanted format from stored samples, or falls back to `builtin:nonempty`.
+
+## Code workspaces
+
+The operator grants one:
+
+```bash
+cortex grant add-workspace ~/src/app
+cortex grant add-program "$(command -v node)"
+```
+
+Add `--network` only if the workspace's builds need the network.
+
+| Tool | Example |
+|---|---|
+| `context_workspace` | `{}` lists every workspace; `{"action": "search", "workspace": "~/src/app", "pattern": "TODO"}`; `{"action": "read", "workspace": "…", "path": "src/a.js"}` |
+| `context_edit` | `{"workspace": "…", "path": "src/a.js", "replace": {"old": "a - b", "new": "a + b"}, "expectDigest": "sha256:…", "reason": "add subtracted"}` |
+| `context_run` | `{"workspace": "…", "program": "/opt/homebrew/bin/node", "args": ["--test"]}` |
+| undo | `{"action": "undo", "change": "edit-42"}` or `{"action": "undo", "change": "workspace-run-57"}` |
+
+- **Reading:** the digest returned by `read` is what `expectDigest` checks. If anything changed the file
+  since, the edit is refused.
+- **Edits:** each one returns a change id and a unified diff.
+- **Runs:** each one returns its exit code, `passed`, output tails and every file it added, changed or
+  removed, with one change id that undoes them all.
+- **History:** `context_workspace` with `action: "changes"` lists everything Cortex did there, with
+  diffs and undo status.
+
+## Requests in plain language
+
+```bash
+cortex do "Compress every text file in ~/inbox losslessly into ~/outbox"
+cortex do "The tests in ~/src/app fail; fix the source, not the tests, and prove the suite passes"
+cortex do "..." --dry-run     # print the prompt the agent would get
+```
+
+- **The agent:** `cortex do` runs Claude Code headless (`CORTEX_AGENT` names another compatible
+  command). Its prompt holds the environment model, the rules and the request. It gets only the
+  `context_*` tools: no shell and no file tools.
+- **The report:** the agent's report goes to stdout. A summary from the ledger (entries by kind,
+  deliveries, skills, code changes, test runs, undos) goes to stderr.
+- **The record:** everything is saved under `$CORTEX_HOME/requests/`.

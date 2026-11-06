@@ -2,11 +2,17 @@
 
 **An AI's experience with software, turned into abilities it can prove and pass on.**
 
-Context Cortex is an MCP server and a command line (`cortex`). Through eighteen `context_*` tools, any model
-can learn what the programs on a machine actually do, by running bounded experiments in a sandbox. It
-can turn what works into a skill that checks its own results, and hand that skill to a different model
-or machine, which re-proves it before use. The model's weights never change. What it can reliably do
-keeps growing.
+Context Cortex is an MCP server and a command line (`cortex`). Through twenty-four `context_*` tools, any
+model can understand the machine it is on, act on real code, and learn what the programs there actually
+do by running bounded experiments in a sandbox:
+
+- **The machine:** its programs, its data, its code workspaces, and what it already knows.
+- **Real code:** read, search and edit it, run its tests and builds, and undo any change.
+- **Skills:** what works becomes a skill that checks its own results. Another model or machine can
+  inherit it, and re-proves it before use.
+
+You can also just ask, with `cortex do "<request>"`. The model's weights never change. What it can
+reliably do keeps growing.
 
 ```text
   goal ──► probe ──► experiment ──► calibrate ──► crystallise ──► use ──► transfer
@@ -17,6 +23,24 @@ keeps growing.
 ```
 
 ## What it gives an AI
+
+- **It understands its whole environment.** `context_environment` covers:
+  - the host and what its sandbox enforces;
+  - the operator's authority;
+  - every granted program and what it says it does;
+  - a census of the data by actual content;
+  - every code workspace: git branch, languages, manifests, and the test and build commands it uses;
+  - what is already established;
+  - what it can do with the data right now;
+  - what is missing.
+
+  `context_manual` states the rules its own code enforces.
+- **It acts on real code.** In workspaces the operator grants, it reads and searches code, makes
+  digest-checked edits, and runs the project's own tests and builds (`context_run`). Every edit and
+  every file a run touches is in the ledger with its diff and can be undone.
+- **It acts on what you ask.** `cortex do "fix the failing tests in ~/src/app"` hands the request to an
+  agent primed with the environment model and the rules, restricted to Cortex's tools. Afterwards the
+  ledger, not the agent's own account, says what was done.
 
 - **It learns programs it was never given a tool for.** Any program the operator grants becomes
   learnable through MCP alone, with no shell needed. The AI reads the usage text (`probe`), defines an
@@ -65,18 +89,32 @@ node bin/cortex.js connect codex    # Codex TOML
 node bin/cortex.js connect json     # generic mcpServers JSON
 ```
 
-Then give the model a goal, not a tool list:
+Grant a code workspace and ask for something:
+
+```bash
+node bin/cortex.js grant add-workspace ~/src/my-app
+node bin/cortex.js grant add-program "$(command -v node)"
+node bin/cortex.js do "The tests in ~/src/my-app fail. Fix the source, not the tests, and prove the suite passes."
+```
+
+Or connect any MCP client and give the model a goal, not a tool list:
 
 > Using Context Cortex, find out what /usr/bin/gzip can do, prove which operations are lossless, and
 > save a skill another agent can use to compress text with a verified round trip.
 
-## The eighteen tools
+## The twenty-four tools
 
-Every tool the proposal named exists as its own tool, plus the ones an AI needs in order to use them
-without a shell.
+Every tool the proposal named exists as its own tool, plus the ones an AI needs to understand its
+environment, act on code, and use the rest without a shell.
 
 | Tool | What the AI gets |
 |---|---|
+| `context_environment` | Everything it can reach and knows: host, sandbox, authority, programs, data census, code workspaces, knowledge, what it can do with the data now, and what is missing |
+| `context_manual` | The rules its code enforces: tools, claim states, witnesses, skills, transfer, formats, sources and sandbox policy |
+| `context_workspace` | Real code: an overview of each granted workspace, plus files, read (with digest), search, and every change Cortex made there with diffs |
+| `context_edit` | Reversible edits: exact-string replace, whole content or delete, refused if the file changed since it was read; `undo` puts back any edit or run |
+| `context_run` | The project's own tests, builds, linters or tools, run in the workspace with everything else confined. Every file it changed is reported and undoable |
+| `context_apply` | A skill run over every matching file in a directory, each output checked and delivered, never overwriting |
 | `context_status` | The grant, the sandbox, counts of operations, claims by state, witnesses and skills, and ledger integrity |
 | `context_discover` | A survey of every granted program, with no task needed. Each is probed, sandboxed, for what it says it is and which formats it mentions; unchanged programs are not re-probed |
 | `context_probe` | One program's usage text, read sandboxed with no inputs |
@@ -115,11 +153,20 @@ exactly"), each checked by a calibrated witness on every successful trial.
 
 ## Authority and confinement
 
-- **The grant is the operator's.** It lists programs, read roots and write roots. Discovery,
-  experiments and imports never widen it, and no MCP tool can change it.
-- **Everything runs confined:** `sandbox-exec` on macOS, `bubblewrap` on Linux, with no network, writes
-  only inside a fresh work directory, home directories unreadable, and CPU, file-size, time and output
-  limits. With no sandbox nothing runs, unless the operator sets `allowUnsandboxed`.
+- **The grant is the operator's.** It lists programs, read roots, write roots and code workspaces.
+  Discovery, experiments and imports never widen it, and no MCP tool can change it.
+- **Code workspaces:**
+  - granted with `cortex grant add-workspace <dir>`, and `--network` only if its builds need it;
+  - edits and runs never leave the workspace, never touch `.git`, and never follow a link out;
+  - every change keeps the bytes before and after, so it can be undone;
+  - an edit is refused if the file changed since it was read.
+- **Everything runs confined:** `sandbox-exec` on macOS, `bubblewrap` on Linux.
+  - **Experiments:** no network, writes only inside a fresh work directory, home directories
+    unreadable, and CPU, file-size, time and output limits.
+  - **Workspace runs:** the same, except that the workspace is also writable, and network is allowed
+    only where the operator granted it.
+
+  With no sandbox nothing runs, unless the operator sets `allowUnsandboxed`.
 - **Programs are pinned by digest.** A changed program makes its claims stale and its skills unusable
   until they are revalidated.
 - **Bundles carry no authority.** On import, artefacts are checked against their digests, the schema is
@@ -130,19 +177,21 @@ file and write outside its sandbox (it can do both when the sandbox is off, and 
 
 ## Status
 
-**v0.2.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 38 tests and
-17 schema checks. One of the tests is a real MCP client session that drives all eighteen tools over
-stdio. CI runs the suite on macOS and on Linux with bubblewrap.
+**v0.3.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 49 tests and
+17 schema checks. One of the tests is a real MCP client session over stdio that drives every tool. CI
+runs the suite on macOS and on Linux with bubblewrap.
 
 ### Real agent runs (6 November 2026, development evidence)
 
 In each run, a fresh headless Claude Code session had only the Context Cortex MCP tools: no shell and
-no file tools. Every delivered file was then checked outside Cortex with the real decompressor.
+no file tools. Every result was then checked outside Cortex: delivered files with the real
+decompressors, and code with the project's own tests.
 
 | Run | Given | What the agent did on its own | Cost |
 |---|---|---|---|
 | 1 (6 tools) | `zstd`, which the tests never use, and a goal | Probed it, established compress and decompress, calibrated a round-trip witness, and built an established skill. The delivered file decompresses with the real `zstd` to the original. | 19 turns, 115 s, $0.85 |
 | 2 (18 tools) | A directory of six compressors it was not told about, and "give this machine as many verified lossless text-compression abilities as you can" | Discovered gzip, bzip2, xz, zstd, lz4 and brotli, and established six skills, each re-checking the round trip on every run. All six delivered files decompress to the original. | 53 turns, 246 s, $1.40 |
+| 3 (`cortex do`, 24 tools) | A JavaScript project it had never seen, with three failing tests, and "fix the source, not the tests, and prove the suite passes" | Ran `npm test` (3 failing), found three bugs (whitespace splitting, trailing hyphens, lexicographic sort), made three reversible edits (`edit-18`…`edit-20`), and re-ran `npm test` (3 passing). Checked outside Cortex: the tests pass, and the test file and `package.json` are byte-identical to before. | 10 turns, 49 s, $0.31 |
 
 What the runs exposed was as useful as what they built:
 
@@ -160,8 +209,8 @@ These are development runs by the builder, not an independent evaluation.
 
 Not yet built, and not claimed:
 
-- **Inputs:** only local programs, with file or stdin input and file or stdout output. There are no
-  HTTP APIs and no network access.
+- **HTTP APIs:** not reflected as operations. A workspace run can reach the network where the operator
+  allows it, but experiments never can.
 - **Witnesses:** they are built-ins, granted programs, or comparisons through an established operation.
   A model cannot yet write its own validator code.
 - **Format detection:** by magic bytes for about twenty formats. Others need a format witness to be
