@@ -21,10 +21,19 @@ export const SANDBOX_POLICY = [
 const LIMITS = 'ulimit -t "$CORTEX_CPU" 2>/dev/null; ulimit -f "$CORTEX_FSIZE" 2>/dev/null; exec "$0" "$@"';
 const HOME_ROOTS = ["/Users", "/home", "/root"];
 const PATH_DIRS = ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+export { PATH_DIRS };
 
 const sbString = (s) => JSON.stringify(s);
 
+/** sandbox-exec needs search permission on every ancestor of an allowed path; the deny on home
+ *  roots would otherwise make a workspace under /Users unenterable (EPERM on lstat of /Users). */
+function ancestors(path) {
+  const parts = path.split("/").filter(Boolean);
+  return parts.slice(0, -1).map((_, i) => "/" + parts.slice(0, i + 1).join("/"));
+}
+
 function macProfile(work, readRoots, { writeRoots = [], network = false } = {}) {
+  const roots = [...readRoots, ...writeRoots, work];
   return [
     "(version 1)",
     "(allow default)",
@@ -33,6 +42,7 @@ function macProfile(work, readRoots, { writeRoots = [], network = false } = {}) 
     `(allow file-write* (subpath ${sbString(work)}) (literal "/dev/null") (literal "/dev/tty"))`,
     ...writeRoots.map((r) => `(allow file-write* (subpath ${sbString(r)}))`),
     `(deny file-read* ${HOME_ROOTS.map((h) => `(subpath ${sbString(h)})`).join(" ")})`,
+    ...[...new Set(roots.flatMap(ancestors))].map((a) => `(allow file-read-metadata (literal ${sbString(a)}))`),
     `(allow file-read* (subpath ${sbString(work)}))`,
     ...[...readRoots, ...writeRoots].map((r) => `(allow file-read* (subpath ${sbString(r)}))`),
   ].join("\n");
@@ -100,14 +110,24 @@ async function execute({ kind, program, args, work, stdinPath, readRoots = [], w
   const t0 = Date.now();
   try {
     return await new Promise((resolveRun, rejectRun) => {
-      const child = spawn(argv[0], argv.slice(1), { cwd: cwd ?? dir, env, stdio: [stdinPath ? "pipe" : "ignore", "pipe", "pipe"] });
+      // Detached: the program runs in its own process group. sandbox-exec (and sh) fork the real
+      // program, so killing the direct child alone leaves it holding the pipes open — a timed-out
+      // run would then wait out the program instead of stopping at the timeout. Kill the group.
+      const child = spawn(argv[0], argv.slice(1), { cwd: cwd ?? dir, env, detached: true, stdio: [stdinPath ? "pipe" : "ignore", "pipe", "pipe"] });
       const out = [], err = [];
       let outBytes = 0, errBytes = 0, overflow = false, timedOut = false;
+      const killGroup = () => {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      };
       child.stdout.on("data", (d) => {
         outBytes += d.length;
         if (outBytes > maxOutputBytes) {
           overflow = true;
-          child.kill("SIGKILL");
+          killGroup();
         } else out.push(d);
       });
       child.stderr.on("data", (d) => {
@@ -119,7 +139,7 @@ async function execute({ kind, program, args, work, stdinPath, readRoots = [], w
       }
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill("SIGKILL");
+        killGroup();
       }, timeoutMs);
       child.on("error", (e) => {
         clearTimeout(timer);
