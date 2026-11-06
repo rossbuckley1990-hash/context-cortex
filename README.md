@@ -2,7 +2,7 @@
 
 **An AI's experience with software, turned into abilities it can prove and pass on.**
 
-Context Cortex is an MCP server and a command line (`cortex`). Through six `context_*` tools, any model
+Context Cortex is an MCP server and a command line (`cortex`). Through eighteen `context_*` tools, any model
 can learn what the programs on a machine actually do, by running bounded experiments in a sandbox. It
 can turn what works into a skill that checks its own results, and hand that skill to a different model
 or machine, which re-proves it before use. The model's weights never change. What it can reliably do
@@ -70,16 +70,31 @@ Then give the model a goal, not a tool list:
 > Using Context Cortex, find out what /usr/bin/gzip can do, prove which operations are lossless, and
 > save a skill another agent can use to compress text with a verified round trip.
 
-## The six tools
+## The eighteen tools
+
+Every tool the proposal named exists as its own tool, plus the ones an AI needs in order to use them
+without a shell.
 
 | Tool | What the AI gets |
 |---|---|
 | `context_status` | The grant, the sandbox, counts of operations, claims by state, witnesses and skills, and ledger integrity |
-| `context_goal` | For `have → want` with `preserve`: skills, routes, the gaps blocking each route and the experiment that closes it. With no arguments: everything possible now, and what is newly possible `since` a point |
-| `context_experiment` | `probe` a program's usage text, `run` an experiment (trials, controls, a determinism repeat, hypotheses), `calibrate` a witness, store a `sample`, list `claims` |
-| `context_crystallize` | Turn a demonstrated workflow into a skill. It is established only when its claims are established, its witnesses calibrated, its preserved properties shown, and its self-test (one pass and one refuse at least) behaves as declared |
-| `context_skill` | `list`, `explain` or `run` a skill. Every step runs sandboxed and its success conditions are checked. `deliver` writes the output into a write root, never overwriting |
-| `context_transfer` | `export` a bundle, or `import` one, which re-runs everything here. `revalidate` an earlier import |
+| `context_discover` | A survey of every granted program, with no task needed. Each is probed, sandboxed, for what it says it is and which formats it mentions; unchanged programs are not re-probed |
+| `context_probe` | One program's usage text, read sandboxed with no inputs |
+| `context_artefact` | Store a sample, read any artefact back (text or base64, bounded), list artefacts, or make a deliberately damaged copy |
+| `context_experiment` | Trials, negative controls, a determinism repeat and witness-checked hypotheses, with every claim decided from the evidence |
+| `context_witness` | Calibrate a checker against references and generated damage; list or explain witnesses |
+| `context_claims` | Every claim with its state, evidence counts and why it is not established yet |
+| `context_explain` | The trail behind an operation, claim, witness or ledger entry, down to each trial's inputs, outputs and verdict |
+| `context_goal` | For `have → want` with `preserve`: skills, routes, and the state of every claim they rest on |
+| `context_gap` | The gaps on the nearest routes, each with a ready-to-submit draft that closes it. For a property to preserve, that includes a witness built from demonstrated trials and an established decoder |
+| `context_possibilities` | Every format reachable through established operations, the properties proven along each route, and what became possible `since` a point |
+| `context_simulate` | Candidate routes run side by side on real inputs, sandboxed, delivering nothing: what completed, real output formats, sizes, time and checks |
+| `context_compose` | The best fully established route turned into a skill in one call, with success conditions from the evidence and self-test fixtures from stored samples; it can run the skill at once |
+| `context_crystallize` | A skill defined by hand, held to the same rules |
+| `context_skill` | `list`, `explain` or `run` a skill. Every step runs sandboxed, success conditions are checked, and the output can be delivered into a write root |
+| `context_evolve` | Re-runs what is stale or unfinished (a changed program, observed claims, an outdated witness, an unusable skill) and reports every state that moved |
+| `context_transfer` | `export` a bundle; `import` one, which re-runs everything here; `revalidate` an earlier import |
+| `context_ledger` | Verify the hash chain and read entries by kind |
 
 The CLI has the same operations, plus the grant commands. Run `node bin/cortex.js help`.
 [docs/USAGE.md](docs/USAGE.md) has the specification formats and a worked example.
@@ -115,9 +130,19 @@ file and write outside its sandbox (it can do both when the sandbox is off, and 
 
 ## Status
 
-**v0.1.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 25 tests and
-17 schema checks. One of the tests is a real MCP client session that runs the whole loop through
-`context_*` calls alone. CI runs the suite on macOS and on Linux with bubblewrap.
+**v0.2.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 37 tests and
+17 schema checks. One of the tests is a real MCP client session that drives all eighteen tools over
+stdio. CI runs the suite on macOS and on Linux with bubblewrap.
+
+**A real agent run (6 November 2026, development evidence).** A fresh Claude Code session was given
+only the MCP tools, with no shell, and a program the tests never use (`zstd`).
+- **Turns and cost:** 19 turns, 115 s, $0.85.
+- **What it did:** it probed zstd, established compress and decompress, calibrated a round-trip
+  witness, and crystallised an established skill.
+- **Delivery:** the skill delivered a file that the real `zstd -d` decompresses to the original.
+- **What it caught:** two contradictions (the compressor accepts damaged input, which is correct for a
+  compressor) and a bug in the engine, where unrecognised binary got past a `text/plain` input check. The
+  bug is fixed and has a regression test.
 
 Not yet built, and not claimed:
 

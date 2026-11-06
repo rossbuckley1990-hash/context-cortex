@@ -124,19 +124,22 @@ plus one engine behaviour:
 | `context_simulate` | later | Could be a dry-run mode of `context_compose` |
 | `context_possibilities` | later, but measured | EXPERIMENT-001 computes the reachable-outcome diff offline as a metric |
 
-**What v0.1.0 ships:** six tools on a standalone server.
+**What ships (v0.2.0):** all eight proposed tools, each as its own tool, plus ten that make them usable
+without a shell. The owner chose the full surface on 6 November 2026.
 
-| Tool | Covers |
+| Proposed | Built as |
 |---|---|
-| `context_status` | Grant, sandbox, counts, ledger integrity |
-| `context_goal` | `context_goal` and `context_gap`; with no arguments, `context_possibilities` with a `since` diff |
-| `context_experiment` | `context_experiment`, plus `probe` (usage text), `calibrate` (witnesses), `sample` and `claims` |
-| `context_crystallize` | `context_crystallize`, with the self-test |
-| `context_skill` | Listing, explaining and running skills |
-| `context_transfer` | `context_transfer`; import revalidates by re-running everything, which also covers part of `context_evolve` |
+| `context_goal` | `context_goal` |
+| `context_gap` | `context_gap`, with executable drafts for each gap |
+| `context_experiment` | `context_experiment`, with `context_probe`, `context_witness` and `context_artefact` |
+| `context_possibilities` | `context_possibilities`, plus the inventory from `context_discover` |
+| `context_simulate` | `context_simulate`: routes run side by side on real inputs, sandboxed, nothing delivered |
+| `context_crystallize` | `context_crystallize` by hand, and `context_compose` automatically from a ready route |
+| `context_evolve` | `context_evolve`: re-runs the experiments of changed or unfinished operations, recalibrates outdated witnesses, re-crystallises unusable skills |
+| `context_transfer` | `context_transfer`, where import re-runs everything |
 
-Staleness (part of `context_evolve`) is checked on every read: a changed program digest makes claims
-stale. `context_simulate` is not built.
+The others are `context_status`, `context_skill`, `context_claims`, `context_explain` and
+`context_ledger`.
 
 ## 5. Witnesses, including ones the model writes
 

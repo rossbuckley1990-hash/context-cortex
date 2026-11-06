@@ -173,3 +173,24 @@ cortex possibilities --since 120
 cortex export gzip-verified --out /out/b.json     cortex import /samples/b.json
 cortex ledger verify
 ```
+
+## The other tools
+
+| Tool | Example arguments |
+|---|---|
+| `context_discover` | `{}` or `{"formats": ["image/png"], "limit": 50}` |
+| `context_probe` | `{"program": "/usr/bin/gzip"}` |
+| `context_artefact` | `{"action": "get", "digest": "sha256:…"}`, `{"action": "list", "format": "text/plain"}`, `{"action": "mutate", "digest": "sha256:…", "kind": "truncate"}` |
+| `context_witness` | `{"action": "calibrate", "witness": {…}, "references": [{"bind": {…}}]}`, `{"action": "list"}` |
+| `context_claims` | `{"operation": "gzip.compress", "state": "observed"}` |
+| `context_explain` | `{"claim": "gzip.compress:lossless"}`, `{"operation": "gzip.decompress"}`, `{"entry": 42}` |
+| `context_gap` | `{"have": "application/gzip", "want": "text/plain", "preserve": ["bytes"]}`. Submit each draft's `first` then `then` |
+| `context_possibilities` | `{"since": "120"}` |
+| `context_simulate` | `{"have": "text/plain", "want": "application/gzip", "preserve": ["bytes"], "inputs": [{"text": "…"}], "witness": "gzip-roundtrip"}` |
+| `context_compose` | `{"have": "text/plain", "want": "application/gzip", "preserve": ["bytes"], "run": {"input": {"path": "/samples/x.txt"}, "deliver": "/out/x.gz"}}` |
+| `context_evolve` | `{}` after a program upgrade, or `{"operation": "gzip.compress"}` |
+| `context_ledger` | `{"action": "verify"}`, `{"action": "entries", "kind": "trial", "limit": 20}` |
+
+`compose` builds success conditions from the witnesses that established each preserved property, and
+re-runs them on every use. Without anything to preserve, it calibrates a `format-is` witness for the
+wanted format from stored samples, or falls back to `builtin:nonempty`.

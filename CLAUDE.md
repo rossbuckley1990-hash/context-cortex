@@ -13,14 +13,15 @@ design. Read it before proposing a new direction.
 - `src/sandbox.js`: sandbox-exec and bubblewrap confinement. `src/grant.js`: the operator's authority.
 - `src/ledger.js`, `src/artefacts.js` and `src/state.js`: the hash-chained ledger, the
   content-addressed store, and locked state.
-- `src/mcp.js`: the six `context_*` tools. `bin/cortex.js`: the CLI.
+- `src/compose.js` (simulate, compose), `src/evolve.js` and `src/replay.js` (shared by evolve and transfer).
+- `src/mcp.js`: the eighteen `context_*` tools. `bin/cortex.js`: the CLI.
 
 ## Rules
 
 - The engine decides claim states from ledger evidence. Documentation and model output are hypotheses.
 - No MCP tool may change the grant. Discovery and import never grant authority.
 - Nothing runs unconfined unless the operator set `allowUnsandboxed`.
-- Keep the tool surface small: a new tool must be needed by a real workflow or by EXPERIMENT-001.
+- The owner wants the full tool surface (18 tools). A new tool must do real work through the engine, never a stub, and must be covered by the MCP client test.
 - Name the commit, date and kind (development or independent) of every result you quote. Development
   evidence is never presented as acceptance.
 

@@ -124,7 +124,7 @@ async function execute({ kind, program, args, work, stdinPath, readRoots = [], t
 }
 
 /** Run a program under the host sandbox, or refuse. */
-export async function runConfined({ grant, program, args, work, stdinPath }) {
+export async function runConfined({ grant, program, args, work, stdinPath, timeoutMs }) {
   const sb = await detectSandbox();
   if (!sb.kind && !grant.allowUnsandboxed) {
     throw new Refusal("no-sandbox", `no sandbox is available (${sb.reason}); nothing was run. An operator may set allowUnsandboxed in the grant.`);
@@ -136,7 +136,7 @@ export async function runConfined({ grant, program, args, work, stdinPath }) {
     work,
     stdinPath,
     readRoots: [],
-    timeoutMs: grant.limits.timeoutMs,
+    timeoutMs: Math.min(timeoutMs ?? grant.limits.timeoutMs, grant.limits.timeoutMs),
     maxOutputBytes: grant.limits.maxOutputBytes,
   });
   return { ...r, sandbox: sb.kind ?? "none (operator allowed unsandboxed execution)" };

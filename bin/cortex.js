@@ -6,7 +6,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Cortex, defaultHome, operatorActor, VERSION } from "../src/cortex.js";
 import { defaultGrant, loadGrant, saveGrant } from "../src/grant.js";
-import { goal } from "../src/goal.js";
+import { compose, simulate } from "../src/compose.js";
+import { evolve } from "../src/evolve.js";
+import { gap, goal } from "../src/goal.js";
 import { serveStdio } from "../src/mcp.js";
 import { crystallize, explainSkill, listSkills, runSkill } from "../src/skills.js";
 import { exportBundle, importBundle, readBundle, revalidateBundle, writeBundle } from "../src/transfer.js";
@@ -29,25 +31,36 @@ Operator (the only way to change authority):
   grant remove <path>                     remove an entry from any list
   grant allow-unsandboxed <true|false>    run without a sandbox (off by default; not recommended)
 
-Learning:
-  probe <program>                         read a granted program's usage text, sandboxed
+Discovery:
+  discover [--limit n] [--refresh] [--formats a,b]   survey every granted program
+  probe <program>                         read one program's usage text, sandboxed
   possibilities [--since <seq|time>]      everything established routes make possible now
+
+Learning:
   sample <path>                           store a file from a read root as a sample
+  artefact <digest> [--as text|base64]    read a stored artefact
+  artefacts [--format f] [--origin o]     list stored artefacts
   experiment <spec.json>                  run an experiment (see docs/USAGE.md)
   calibrate <spec.json>                   calibrate a witness
-  claims [--operation id] [--state s]     list claims
-  goal --have <type> --want <type> [--preserve a,b]
+  witnesses                               list witnesses
+  claims [--operation id] [--state s] [--kind k] [--property p]
+  explain --operation id | --claim id | --witness id | --entry seq
+  evolve [--operation id] [--limit n]     re-decide stale and unfinished claims and skills
 
-Skills:
-  crystallize <skill.json>                crystallise and self-test a skill
+Goals and skills:
+  goal --have <type> --want <type> [--preserve a,b]
+  gap --have <type> --want <type> [--preserve a,b]  gaps, with drafts that close them
+  simulate --have t --want t --input <path> [--input <path>] [--preserve a] [--witness id]
+  compose --have t --want t [--preserve a,b] [--id name]  build a skill from a ready route
+  crystallize <skill.json>                crystallise and self-test a skill by hand
   skills                                  list skills
-  explain <skill>                         show a skill's contract
+  skill <skill>                           show a skill's contract
   run <skill> --in name=<path> … [--deliver <path>]
   export <skill>… --out <path>            write a transfer bundle (inside a write root)
   import <bundle.json> [--no-revalidate]  import and revalidate a bundle (inside a read root)
   revalidate <bundle-digest>
 
-  ledger verify                           check the evidence ledger's hash chain
+  ledger [verify|entries] [--kind k] [--from seq]
   version | help
 
 Output is JSON. Refusals exit 2, other failures 1.`;
@@ -130,11 +143,29 @@ async function main() {
       return print(goal(cx, { since: flags.since }));
     case "probe":
       return print(await cx.probe(absolute(resolve(positional[0] ?? ""), "program")));
+    case "discover":
+      return print(await cx.discover({ limit: flags.limit ? Number(flags.limit) : 25, refresh: !!flags.refresh, formats: flags.formats ? String(flags.formats).split(",") : undefined }));
+    case "artefact":
+      return print(cx.artefact(positional[0], { as: flags.as }));
+    case "artefacts":
+      return print(cx.artefactList({ format: flags.format, origin: flags.origin }));
+    case "witnesses":
+      return print(cx.witnesses());
+    case "explain":
+      return print(cx.explain({ operation: flags.operation, claim: flags.claim, witness: flags.witness, entry: flags.entry }));
+    case "evolve":
+      return print(await evolve(cx, { operation: flags.operation, limit: flags.limit ? Number(flags.limit) : 10 }, actor));
+    case "gap":
+      return print(gap(cx, { have: flags.have, want: flags.want, preserve: flags.preserve ? String(flags.preserve).split(",") : [] }));
+    case "simulate":
+      return print(await simulate(cx, { have: flags.have, want: flags.want, preserve: flags.preserve ? String(flags.preserve).split(",") : [], witness: flags.witness, inputs: [].concat(flags.input ?? []).map((p) => ({ path: absolute(resolve(p), "input") })) }, actor));
+    case "compose":
+      return print(await compose(cx, { have: flags.have, want: flags.want, preserve: flags.preserve ? String(flags.preserve).split(",") : [], id: flags.id }, actor));
     case "crystallize":
       return print(await crystallize(cx, readSpec(positional[0]), actor));
     case "skills":
       return print(listSkills(cx));
-    case "explain":
+    case "skill":
       return print(explainSkill(cx, positional[0]));
     case "run": {
       const inputs = {};
@@ -158,7 +189,7 @@ async function main() {
     case "revalidate":
       return print(await revalidateBundle(cx, positional[0], actor));
     case "ledger":
-      return print(cx.ledger.verify());
+      return print(positional[0] === "entries" ? cx.ledgerEntries({ kind: flags.kind, from: flags.from }) : cx.ledger.verify());
     default:
       throw new Refusal("bad-request", `unknown command ${cmd}; see cortex help`);
   }

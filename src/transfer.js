@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { arch, platform } from "node:os";
 import { grantedRead, grantedWrite } from "./grant.js";
 import { validateBundle } from "./schemas.js";
-import { crystallize } from "./skills.js";
+import { replay } from "./replay.js";
 import { digestOf, isObject, now, Refusal, sha256 } from "./util.js";
 
 function collect(cx, s, skillIds) {
@@ -136,44 +136,19 @@ export async function revalidateBundle(cx, bundleDigest, actor) {
   if (steps.programs.some((p) => p.here === "missing or not granted")) {
     return { ...steps, outcome: "not-revalidated", reason: "a program the bundle needs is missing or not granted on this host; the operator decides what to grant", skills: b.skills.map((k) => ({ skill: k.id, status: "imported-unvalidated" })) };
   }
-  // Witnesses whose via-operations are not established yet must wait for those experiments.
-  const pending = [...b.witnesses];
-  const experiments = [...b.experiments];
-  const errors = [];
-  for (let round = 0; round < 4 && (pending.length || experiments.length); round++) {
-    for (const e of [...experiments]) {
-      const needs = e.spec.hypotheses.map((h) => h.check.witness).filter((w) => !w.startsWith("builtin:"));
-      if (needs.some((w) => pending.some((p) => p.id === w))) continue;
-      try {
-        const r = await cx.experiment({ operation: e.spec.operation, trials: e.spec.trials.map((t) => ({ inputs: t.inputs, expect: t.expect })), hypotheses: e.spec.hypotheses, controls: e.spec.controls }, actor);
-        steps.experiments.push({ operation: e.operation, experiment: r.experiment, claims: r.claims.map((c) => ({ id: c.id, state: c.state })) });
-      } catch (err) {
-        errors.push(`experiment on ${e.operation}: ${err.message}`);
-      }
-      experiments.splice(experiments.indexOf(e), 1);
-    }
-    for (const w of [...pending]) {
-      try {
-        const r = await cx.calibrate({ witness: w.definition, references: w.calibrationSpec.references, mutations: w.calibrationSpec.mutations, mutate: w.calibrationSpec.mutate }, actor);
-        steps.calibrations.push({ witness: w.id, status: r.status });
-        pending.splice(pending.indexOf(w), 1);
-      } catch (err) {
-        if (round === 3) errors.push(`witness ${w.id}: ${err.message}`);
-      }
-    }
-  }
+  const replayed = await replay(cx, { experiments: b.experiments, witnesses: b.witnesses, skills: [] }, actor);
+  steps.experiments = replayed.experiments;
+  steps.calibrations = replayed.calibrations;
+  const errors = replayed.errors;
   const local = cx.state.refresh();
   for (const c of b.claims) {
     const mine = cx.claimView(local.claims[c.id]);
     steps.agreement.push({ claim: c.id, exported: c.state, here: mine?.state ?? "not tested" });
   }
-  for (const k of b.skills) {
-    try {
-      const r = await crystallize(cx, k.definition, actor, { status: "revalidate" });
-      steps.skills.push({ skill: k.id, status: r.status, ...(r.gaps ? { gaps: r.gaps } : {}), selfTest: r.selfTest, sameRevision: r.revision === k.revision });
-    } catch (err) {
-      steps.skills.push({ skill: k.id, status: "imported-unvalidated", error: err.message });
-    }
+  const crystallised = await replay(cx, { skills: b.skills.map((k) => k.definition) }, actor, { skillStatus: "revalidate" });
+  for (const [i, k] of b.skills.entries()) {
+    const r = crystallised.skills[i];
+    steps.skills.push({ skill: k.id, status: r.status === "unchanged" ? "imported-unvalidated" : r.status, ...(r.gaps ? { gaps: r.gaps } : {}), ...(r.error ? { error: r.error } : {}), selfTest: r.selfTest, sameRevision: r.revision === k.revision });
   }
   const disagreements = steps.agreement.filter((a) => a.exported !== a.here);
   cx.ledger.append("revalidation", { bundle: bundleDigest, skills: steps.skills.map((k) => ({ skill: k.skill, status: k.status })), disagreements: disagreements.length, errors });

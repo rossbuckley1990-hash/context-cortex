@@ -74,7 +74,9 @@ export function detect(bytes) {
 /** Whether detection can confirm a declared format: true, false (it is something else), or null (cannot tell). */
 export function confirms(detected, declared) {
   if (!declared || declared === "application/octet-stream") return true;
-  if (!detected.format) return null;
+  // Unrecognised bytes are not a format the detector knows: those signatures and the text test
+  // are decisive, so the bytes cannot be that format. Only unknown declared formats stay open.
+  if (!detected.format) return KNOWN_FORMATS.includes(declared) ? false : null;
   if (detected.format === declared) return true;
   // JSON is text; text/plain accepts it.
   if (declared === "text/plain" && detected.format === "application/json") return true;

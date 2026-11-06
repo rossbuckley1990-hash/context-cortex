@@ -112,7 +112,7 @@ export function goal(cx, req) {
         if (c?.state !== "established") gaps.push({ operation: e.op, missing: `preserves ${p}`, state: c?.state ?? "untested", experiment: `a hypothesis {kind: "preservation", property: "${p}"} on ${e.op}, checked by a calibrated witness` });
       }
     }
-    return { steps: path.map((e) => `${e.op} (${e.from} → ${e.to})`), ready: path.every(ready) && !gaps.length, gaps };
+    return { steps: path.map((e) => `${e.op} (${e.from} → ${e.to})`), operations: path.map((e) => e.op), ready: path.every(ready) && !gaps.length, gaps };
   });
   described.sort((a, b) => a.gaps.length - b.gaps.length || a.steps.length - b.steps.length);
 
@@ -143,4 +143,86 @@ export function goal(cx, req) {
   else if (described.length) next.push(`close the gaps on the nearest route (${described[0].steps.join(" → ")}) with context_experiment`);
   else next.push(`no route from ${have} to ${want} is known: define an operation on a granted program and test it with context_experiment${uninvestigated.length ? ` (uninvestigated granted programs: ${uninvestigated.slice(0, 8).map((p) => p.split("/").pop()).join(", ")}…)` : "; the operator has granted no further programs"}`);
   return { goal: { have, want, preserve }, skills, routes: described.slice(0, 10), contradicted, uninvestigatedPrograms: uninvestigated, next };
+}
+
+/** Established single-input edges: operation, from-format, to-format. */
+function establishedEdges(cx, s) {
+  const views = Object.values(s.claims).map((c) => cx.claimView(c));
+  const byId = Object.fromEntries(views.map((c) => [c.id, c]));
+  const edges = [];
+  for (const o of Object.values(s.operations)) {
+    const ins = Object.entries(o.def.inputs);
+    if (ins.length !== 1) continue;
+    for (const [outName, to] of Object.entries(o.def.outputs)) {
+      if (byId[`${o.def.id}:accepts:${ins[0][0]}`]?.state === "established" && byId[`${o.def.id}:produces:${outName}`]?.state === "established") edges.push({ op: o.def.id, from: ins[0][1], to, input: ins[0][0], output: outName });
+    }
+  }
+  return edges;
+}
+
+/** Successful trials of an operation as (input, output) digest pairs, from the ledger. */
+function demonstratedPairs(cx, s, opId, limit = 3) {
+  const c = s.claims[`${opId}:produces:${Object.keys(s.operations[opId].def.outputs)[0]}`];
+  if (!c) return [];
+  const entries = cx.ledger.read();
+  const pairs = [];
+  for (const ref of c.claim.evidence.supporting) {
+    const e = entries.find((x) => x.hash === ref.digest);
+    if (!e?.body?.success) continue;
+    const input = Object.values(e.body.inputs)[0]?.digest, output = Object.values(e.body.outputs)[0]?.digest;
+    if (input && output && !pairs.some((p) => p.input === input)) pairs.push({ input, output });
+    if (pairs.length >= limit) break;
+  }
+  return pairs;
+}
+
+/**
+ * The gaps between a goal and what is established, each with a concrete draft that would close it:
+ * an experiment to submit, or a witness to calibrate built from demonstrated trials, with the
+ * operations that could produce missing samples. Drafts are suggestions; the engine still decides.
+ */
+export function gap(cx, req) {
+  const g = goal(cx, req);
+  const s = cx.state.data;
+  const edges = establishedEdges(cx, s);
+  const drafts = [];
+  const seen = new Set();
+  for (const route of g.routes.slice(0, 3)) {
+    for (const gp of route.gaps) {
+      const key = `${gp.operation}|${gp.missing}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const op = s.operations[gp.operation];
+      const [inName, inFmt] = Object.entries(op.def.inputs)[0];
+      const [outName, outFmt] = Object.entries(op.def.outputs)[0];
+      if (!gp.missing.startsWith("preserves")) {
+        const samples = cx.artefactList({ format: inFmt, limit: 3 }).map((a) => a.digest);
+        drafts.push({
+          closes: `${gp.operation}: ${gp.missing} (now ${gp.state})`,
+          ...(samples.length >= 2
+            ? { tool: "context_experiment", arguments: { operation: op.def, trials: samples.map((d) => ({ inputs: { [inName]: d } })) } }
+            : { needs: `at least 2 samples of ${inFmt} (have ${samples.length})`, producers: edges.filter((e) => e.to === inFmt).map((e) => e.op), hint: "store samples with context_artefact, or run a producer on samples you have" }),
+        });
+        continue;
+      }
+      const property = gp.missing.slice("preserves ".length);
+      const decoders = edges.filter((e) => e.from === outFmt && e.to === inFmt).map((e) => e.op);
+      const witnessId = `${gp.operation}.${property}-check`;
+      const pairs = demonstratedPairs(cx, s, gp.operation);
+      const existing = cx.witnessRecord(s, witnessId);
+      drafts.push({
+        closes: `${gp.operation}: preserves ${property} (now ${gp.state})`,
+        ...(decoders.length && !existing && pairs.length
+          ? { first: { tool: "context_witness", arguments: { action: "calibrate", witness: { id: witnessId, builtin: "bytes-equal", params: ["original", "candidate"], via: { candidate: decoders[0] } }, references: pairs.map((p) => ({ bind: { original: p.input, candidate: p.output } })) } } }
+          : {}),
+        then: { tool: "context_experiment", arguments: { operation: op.def, trials: pairs.map((p) => ({ inputs: { [inName]: p.input } })), controls: false, hypotheses: [{ id: `preserves-${property}`, kind: "preservation", text: `${gp.operation} preserves ${property}`, property, check: { witness: existing ? witnessId : decoders.length ? witnessId : "<a calibrated two-param witness>", bind: { original: `input.${inName}`, candidate: `output.${outName}` } } }] } },
+        note: decoders.length
+          ? `${decoders[0]} is an established operation from ${outFmt} back to ${inFmt}: it can decode the candidate so bytes-equal compares it with the original. That is only a valid check of ${property} if the decoder itself is exact.`
+          : `no established operation turns ${outFmt} back into ${inFmt}. Find one (context_discover), or calibrate a granted comparison program as the witness.`,
+      });
+    }
+  }
+  const inventory = Object.values(s.inventory ?? {});
+  const candidates = g.routes.length ? [] : inventory.filter((e) => e.formats.includes(g.goal.have) || e.formats.includes(g.goal.want)).map((e) => ({ program: e.program, formats: e.formats, summary: e.summary }));
+  return { goal: g.goal, skills: g.skills, routes: g.routes.map(({ gaps, ...r }) => ({ ...r, gaps: gaps.length })), drafts, candidates, uninvestigatedPrograms: g.uninvestigatedPrograms.slice(0, 20), next: drafts.length ? "submit the drafts in order; re-run context_gap to see what remains" : g.next };
 }

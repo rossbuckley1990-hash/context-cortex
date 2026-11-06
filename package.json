@@ -1,6 +1,6 @@
 {
   "name": "context-cortex",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "A capability layer for AI: experiments on local programs become checked, transferable skills. MCP server and CLI.",
   "type": "module",
