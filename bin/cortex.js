@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Cortex, defaultHome, operatorActor, VERSION } from "../src/cortex.js";
 import { audit } from "../src/audit.js";
+import { recon } from "../src/hunt.js";
 import { defaultGrant, loadGrant, saveGrant } from "../src/grant.js";
 import { compose, simulate } from "../src/compose.js";
 import { apply } from "../src/apply.js";
@@ -51,6 +52,7 @@ Code:
   edit <edit.json>                        a reversible edit (see context_edit)
   undo <change-id>                        put back every file an edit or run changed
   exec --workspace <dir> <program> [args…]  run any executable in the workspace, sandboxed
+  recon --workspace <dir> [--drive-limit n] every way in: entries, taint routes, exploit-verified
 
 Discovery:
   discover [--limit n] [--refresh] [--formats a,b]   survey every granted program
@@ -203,6 +205,8 @@ async function main() {
       if (!r.passed) process.exitCode = 2;
       return;
     }
+    case "recon":
+      return print(await recon(cx, { workspace: absolute(resolve(flags.workspace ?? ".")), driveLimit: flags["drive-limit"] ? Number(flags["drive-limit"]) : undefined }, actor));
     case "discover":
       return print(await cx.discover({ limit: flags.limit ? Number(flags.limit) : 25, refresh: !!flags.refresh, formats: flags.formats ? String(flags.formats).split(",") : undefined }));
     case "artefact":

@@ -3,9 +3,10 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CAT, environment, GZIP } from "./helpers.js";
+import { CAT, environment, grant, GZIP } from "./helpers.js";
 
 const BIN = join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "cortex.js");
 let server, env, pending = new Map(), nextId = 1, buffer = "";
@@ -39,6 +40,10 @@ async function ok(name, args) {
 
 before(() => {
   env = environment([GZIP]);
+  const rws = join(env.root, "recon-ws");
+  mkdirSync(rws);
+  writeFileSync(join(rws, "inj.js"), 'const { exec } = require("child_process");\nconst file = process.argv[2];\nexec(`wc -c ${file}`, (err, out) => console.log(out || err));\n');
+  grant(env, [GZIP], { workspaces: [{ path: rws, network: false }] });
   server = spawn(process.execPath, [BIN, "mcp"], { env: { ...process.env, CORTEX_HOME: env.home }, stdio: ["pipe", "pipe", "inherit"] });
   server.stdout.setEncoding("utf8");
   server.stdout.on("data", (chunk) => {
@@ -65,7 +70,7 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   const list = await send("tools/list", {});
   const names = list.result.tools.map((t) => t.name);
   assert.deepEqual(names, [
-    "context_status", "context_environment", "context_manual", "context_apply", "context_workspace", "context_edit", "context_run", "context_audit", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
+    "context_status", "context_environment", "context_manual", "context_apply", "context_workspace", "context_edit", "context_run", "context_audit", "context_recon", "context_discover", "context_probe", "context_artefact", "context_experiment", "context_witness",
     "context_claims", "context_explain", "context_goal", "context_gap", "context_possibilities", "context_simulate",
     "context_compose", "context_crystallize", "context_skill", "context_evolve", "context_transfer", "context_ledger",
   ]);
@@ -77,7 +82,7 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   assert.deepEqual(status.grant.programs, [GZIP]);
 
   const envModel = await ok("context_environment", {});
-  assert.equal(envModel.cortex.tools, 25);
+  assert.equal(envModel.cortex.tools, 26);
   const rules = await ok("context_manual", { topic: "rules" });
   assert.ok(rules.rules.claimStates.established.length >= 3);
   const survey = await ok("context_discover", {});
@@ -99,6 +104,12 @@ test("initialize, list tools, and run the whole loop through context_* tools", a
   assert.equal(a.refusals, 12);
   assert.ok(a.claims.every((c) => c.state === "established" || c.state === "observed"));
   assert.match(a.coverage.note, /not that the operation is safe/);
+
+  const rc = await ok("context_recon", { workspace: join(env.root, "recon-ws") });
+  assert.equal(rc.summary.exploited, 1, JSON.stringify(rc.summary));
+  const inj = rc.findings.find((f) => f.class === "command-injection");
+  assert.equal(inj.drive.status, "exploited");
+  assert.match(rc.coverage.note, /never that the code is secure/);
 
   const w = await ok("context_witness", { action: "calibrate", witness: { id: "gzip-roundtrip", builtin: "bytes-equal", params: ["original", "compressed"], via: { compressed: "gzip.decompress" } }, references: [{ bind: { original: { text: texts[0] }, compressed: gz[0] } }, { bind: { original: { text: texts[1] }, compressed: gz[1] } }] });
   assert.equal(w.status, "calibrated");
@@ -160,7 +171,8 @@ test("refusals come back as tool errors, and nothing outside the grant runs", as
   assert.equal(read.isError, true);
   assert.match(read.content[0].text, /outside the operator's read roots/);
   const ws = await ok("context_workspace", {});
-  assert.deepEqual(ws.workspaces, [], "no workspace is granted in this environment");
+  assert.equal(ws.workspaces.length, 1, "the recon workspace is granted; everything else is not");
+  assert.equal(ws.workspaces[0].network, false);
   const editOutside = await tool("context_edit", { workspace: env.samples, path: "a.txt", content: "x" });
   assert.equal(editOutside.isError, true);
   assert.match(editOutside.content[0].text, /not inside a code workspace/);

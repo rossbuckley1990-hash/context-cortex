@@ -13,17 +13,17 @@ design. Read it before proposing a new direction.
 - `src/sandbox.js`: sandbox-exec and bubblewrap confinement. `src/grant.js`: the operator's authority.
 - `src/ledger.js`, `src/artefacts.js` and `src/state.js`: the hash-chained ledger, the
   content-addressed store, and locked state.
-- `src/compose.js` (simulate, compose), `src/evolve.js`, `src/replay.js` (shared by evolve and transfer)
-  and `src/audit.js` (adversarial trials).
+- `src/compose.js` (simulate, compose), `src/evolve.js`, `src/replay.js` (shared by evolve and transfer),
+  `src/audit.js` (adversarial trials) and `src/hunt.js` (codebase recon: mapping, taint routes, exploit-verified drives).
 - `src/environment.js` (environment model, manual), `src/apply.js`, `src/agent.js` (`cortex do`), `src/workspace.js` and `src/diff.js` (code).
-- `src/mcp.js`: the twenty-five `context_*` tools. `bin/cortex.js`: the CLI.
+- `src/mcp.js`: the twenty-six `context_*` tools. `bin/cortex.js`: the CLI.
 
 ## Rules
 
 - The engine decides claim states from ledger evidence. Documentation and model output are hypotheses.
 - No MCP tool may change the grant. Discovery and import never grant authority.
 - Nothing runs unconfined unless the operator set `allowUnsandboxed`.
-- The owner wants the full tool surface (25 tools) and Cortex acting on real code in granted workspaces. A new tool must do real work through the engine, never a stub, and must be covered by the MCP client test.
+- The owner wants the full tool surface (26 tools) and Cortex acting on real code in granted workspaces. A new tool must do real work through the engine, never a stub, and must be covered by the MCP client test.
 - Name the commit, date and kind (development or independent) of every result you quote. Development
   evidence is never presented as acceptance.
 

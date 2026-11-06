@@ -2,7 +2,7 @@
 
 **An AI's experience with software, turned into abilities it can prove and pass on.**
 
-Context Cortex is an MCP server and a command line (`cortex`). Through twenty-five `context_*` tools, any
+Context Cortex is an MCP server and a command line (`cortex`). Through twenty-six `context_*` tools, any
 model can understand the machine it is on, act on real code, and learn what the programs there actually
 do by running bounded experiments in a sandbox:
 
@@ -103,7 +103,7 @@ Or connect any MCP client and give the model a goal, not a tool list:
 > Using Context Cortex, find out what /usr/bin/gzip can do, prove which operations are lossless, and
 > save a skill another agent can use to compress text with a verified round trip.
 
-## The twenty-five tools
+## The twenty-six tools
 
 Every tool the proposal named exists as its own tool, plus the ones an AI needs to understand its
 environment, act on code, and use the rest without a shell.
@@ -116,6 +116,7 @@ environment, act on code, and use the rest without a shell.
 | `context_edit` | Reversible edits: exact-string replace, whole content or delete, refused if the file changed since it was read; `undo` puts back any edit or run |
 | `context_run` | Any executable — the project's tests, builds, linters, npm, git — run in the workspace with everything else confined. Every file it changed is reported and undoable |
 | `context_audit` | Adversarial trials: every known-good sample against every kind of damage, each finding reproduced before it counts, clean refusals feeding `rejects:<damage>` claims, and an honest statement of what was not tested |
+| `context_recon` | Every way into a granted codebase, and proof where they open: entry points, capabilities, dependencies, secrets in the clear, and function-scoped source→sink taint routes (command injection, eval, traversal, SQL injection, XSS, SSRF, prototype pollution, deserialization). argv-sourced routes are exploit-verified by driving the real code with a payload in the sandbox, twice: a reproduced marker, executed command or out-of-workspace read counts as exploited; a write the sandbox refused is reported as contained. Undoable, ledgered, with its own coverage stated |
 | `context_apply` | A skill run over every matching file in a directory, each output checked and delivered, never overwriting |
 | `context_status` | The grant, the sandbox, counts of operations, claims by state, witnesses and skills, and ledger integrity |
 | `context_discover` | A survey of every granted program, with no task needed. Each is probed, sandboxed, for what it says it is and which formats it mentions; unchanged programs are not re-probed |
@@ -179,7 +180,7 @@ file and write outside its sandbox (it can do both when the sandbox is off, and 
 
 ## Status
 
-**v0.3.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 56 tests and
+**v0.3.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 63 tests and
 17 schema checks. One of the tests is a real MCP client session over stdio that drives every tool. CI
 runs the suite on macOS and on Linux with bubblewrap.
 
