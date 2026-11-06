@@ -376,7 +376,10 @@ Add `--network` only if the workspace's builds need the network.
   since, the edit is refused.
 - **Edits:** each one returns a change id and a unified diff.
 - **Runs:** each one returns its exit code, `passed`, output tails and every file it added, changed or
-  removed, with one change id that undoes them all.
+  removed, with one change id that undoes them all. The run's process group dies with it, and the
+  change set is taken only after an accounting window (1.5 s) that folds in a surviving child's late
+  writes — `lateWrites` counts them and `settled: false` says the workspace was still changing when
+  the window closed.
 - **History:** `context_workspace` with `action: "changes"` lists everything Cortex did there, with
   diffs and undo status.
 

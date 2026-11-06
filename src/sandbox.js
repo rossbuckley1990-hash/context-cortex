@@ -168,6 +168,11 @@ async function execute({ kind, program, args, work, stdinPath, readRoots = [], w
       });
       child.on("close", (code, signal) => {
         clearTimeout(timer);
+        // A run is a transaction: whatever it left in its process group dies with it, so no child
+        // keeps writing after the run is accounted. A child that daemonised out of the group
+        // (setsid) escapes this kill; the caller's accounting window (workspace run) is what
+        // catches its writes.
+        killGroup();
         resolveRun({ exitCode: code, signal, timedOut, overflow, stdout: Buffer.concat(out), stderr: Buffer.concat(err), durationMs: Date.now() - t0, work: dir });
       });
     });

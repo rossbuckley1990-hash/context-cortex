@@ -125,7 +125,7 @@ environment, act on code, and use the rest without a shell.
 | `context_manual` | The rules its code enforces: tools, claim states, witnesses, skills, transfer, formats, sources and sandbox policy |
 | `context_workspace` | Real code: an overview of each granted workspace, plus files, read (with digest), search, and every change Cortex made there with diffs |
 | `context_edit` | Reversible edits: exact-string replace, whole content or delete, refused if the file changed since it was read; `undo` puts back any edit or run |
-| `context_run` | Any executable — the project's tests, builds, linters, npm, git — run in the workspace with everything else confined. Every file it changed is reported and undoable |
+| `context_run` | Any executable — the project's tests, builds, linters, npm, git — run in the workspace with everything else confined. Every file it changed is reported and undoable; the run's process group dies with it, and the change set is taken only after an accounting window that folds in a surviving child's late writes (a still-changing workspace is reported, never silently missed) |
 | `context_audit` | Adversarial trials: every known-good sample against every kind of damage, each finding reproduced before it counts, clean refusals feeding `rejects:<damage>` claims, and an honest statement of what was not tested |
 | `context_recon` | Every way into a granted codebase, and proof where they open: entry points, capabilities, dependencies, secrets in the clear, and function-scoped source→sink taint routes (command injection, eval, traversal, SQL injection, XSS, SSRF, prototype pollution, deserialization). argv-sourced routes are exploit-verified by driving the real code with a payload in the sandbox, twice: a reproduced marker, executed command or out-of-workspace read counts as exploited; a write the sandbox refused is reported as contained. Undoable, ledgered, with its own coverage stated |
 | `context_repair` | Fixes that carry proof: a one-line guard is applied through reversible edits to what recon proved open, then the exact payload is re-driven twice and must not reproduce, a benign input must behave identically (same exit status and output), and the workspace's own tests must not regress — otherwise the fix is reverted byte-exactly and the failed check named. A write only the code now refuses counts as hardened. Routes that cannot be driven, and classes with no honest one-line guard, come back as needs-redesign with the reasoning, never silently skipped |
@@ -198,7 +198,7 @@ file and write outside its sandbox (it can do both when the sandbox is off, and 
 
 ## Status
 
-**v0.3.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 85 tests and
+**v0.3.0, working and tested; experimental.** On macOS (sandbox-exec), `npm test` passes 87 tests and
 17 schema checks. One of the tests is a real MCP client session over stdio that drives every tool. CI
 runs the suite on macOS and on Linux with bubblewrap.
 

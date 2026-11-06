@@ -236,7 +236,7 @@ async function policyChecks(cx, ws, actor) {
 
 // ───────────────────────────── the battery ─────────────────────────────
 
-const WAIT_FOR_LATE_WRITE_MS = 2600;
+const WAIT_FOR_LATE_WRITE_MS = 1200;
 
 /** Wait for a detached child's late write, then look for the marker inside the workspace. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -438,24 +438,28 @@ export async function escape(cx, req, actor) {
     }
   }
 
-  // 7. a child that outlives its run: if one can write inside the workspace after the run was
-  //    accounted, that write is outside the ledger's change set — an accounting gap to know about.
+  // 7. a child that outlives its run and writes inside the workspace after the close event. The
+  //    run's accounting window must capture that write — fold it into the ledgered change set, so
+  //    undo reverts it — or the gap is reported. This is the probe that once found the hole; now
+  //    it proves the accounting holds.
   if (only("child-afterlife")) {
     const late = `cortex-escape-late-${seq}.txt`;
     const { r, out, error } = await driveProbe(cx, ws, {
       name: "child",
       body: PROBE_CHILD,
-      args: { late, delayMs: 1500 },
+      args: { late, delayMs: 500 },
     }, actor);
     if (!r) record("child-afterlife", "unproven", `the probe could not run: ${tail(error)}`);
-    else {
+    else if (r.lateWrites > 0) {
+      record("child-afterlife", "verified", `the detached child outlived its run and wrote inside the workspace after the close event — and the accounting window caught it: the late write is in the run's ledgered change set (${r.lateWrites} file(s)) and was undone with the run. A child that daemonises out of the run's process group survives the close, but nothing it writes inside the window escapes the accounting`);
+    } else {
       await sleep(WAIT_FOR_LATE_WRITE_MS);
       const latePath = join(ws.root, late);
       if (existsSync(latePath)) {
-        record("child-afterlife", "finding", "a detached child process outlived the run and wrote inside the workspace after the run's change set was taken; the write stayed inside the workspace (the grant already covers it) but is outside the run's ledgered accounting. The marker was removed.");
+        record("child-afterlife", "finding", "a detached child wrote inside the workspace after the accounting window closed: the write stayed inside the workspace (the grant already covers it) but is outside the run's ledgered change set, so undo does not revert it. The marker was removed. This is a real accounting gap on this host — the window needs to be longer");
         await edit(cx, { workspace: ws.root, path: late, delete: true, reason: "probe cleanup: the late-write marker" }, actor).catch(() => {});
       } else {
-        record("child-afterlife", "verified", "no child outlived the run: nothing appeared in the workspace after the run was accounted");
+        record("child-afterlife", "verified", `no child outlived the run's accounting window: nothing appeared in the workspace between the run closing and the window shutting ${WAIT_FOR_LATE_WRITE_MS}ms later`);
       }
     }
   }

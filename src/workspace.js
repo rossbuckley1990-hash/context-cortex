@@ -388,6 +388,45 @@ function gitGuardRestore(root, before) {
   return guarded;
 }
 
+// ───────────────────── the run accounting window ─────────────────────
+// A detached child can outlive its run and write inside the workspace after the close event. The
+// sandbox kills the run's process group, but a child that daemonised (setsid) out of it survives.
+// The change set is therefore taken only after this window: writes that land inside it are folded
+// into the run's ledgered, undoable change set, and a workspace still changing when it closes is
+// reported (settled: false) rather than silently missed. The window is the strength of the
+// guarantee — writes after it are outside the accounting and the report says so.
+
+const SETTLE_WINDOW_MS = 1500;
+const SETTLE_POLL_MS = 375;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Wait out stragglers, then hand back the final snapshot with the accounting verdict:
+ *  settled — the workspace went quiet before the window closed; lateWrites — how many paths
+ *  changed between the close event and the final snapshot (each one folded into the change set). */
+async function settleWrites(cx, ws, baseline) {
+  const atClose = snapshot(cx, ws, baseline);
+  const polls = [atClose];
+  const deadline = Date.now() + SETTLE_WINDOW_MS;
+  while (Date.now() < deadline) {
+    await sleep(Math.min(SETTLE_POLL_MS, deadline - Date.now()));
+    polls.push(snapshot(cx, ws, Object.fromEntries(polls[polls.length - 1].snap)));
+  }
+  const last = polls[polls.length - 1];
+  const same = (a, b) => a.snap.size === b.snap.size && [...a.snap.entries()].every(([rel, v]) => {
+    const o = b.snap.get(rel);
+    return o !== undefined && o.digest === v.digest && o.size === v.size;
+  });
+  const settled = same(polls[polls.length - 2], last);
+  let lateWrites = 0;
+  for (const [rel, v] of last.snap) {
+    const o = atClose.snap.get(rel);
+    if (!o || o.digest !== v.digest || (v.large && (o.size !== v.size || o.mtimeMs !== v.mtimeMs))) lateWrites++;
+  }
+  for (const rel of atClose.snap.keys()) if (!last.snap.has(rel)) lateWrites++;
+  return { after: last, settled, lateWrites };
+}
+
 /**
  * Run any executable inside a granted workspace, sandboxed, with the workspace writable. The
  * workspace grant is the operator's authorisation for work on that code, so the program list does
@@ -411,7 +450,9 @@ export async function run(cx, req, actor) {
     } finally {
       cleanupWork(work);
     }
-    const after = snapshot(cx, ws, Object.fromEntries(before.snap));
+    // the accounting window: anything a surviving child writes inside it joins the change set
+    const settled = await settleWrites(cx, ws, Object.fromEntries(before.snap));
+    const after = settled.after;
     s.workspaceIndex[ws.root] = Object.fromEntries(after.snap);
     const gitGuarded = gitGuardRestore(ws.root, gitBefore);
     const changes = [];
@@ -426,10 +467,13 @@ export async function run(cx, req, actor) {
       return t.length > 8000 ? `…${t.slice(-8000)}` : t;
     };
     const pin = sha256(readFileSync(real));
-    const ref = cx.ledger.append("workspace-run", { workspace: ws.root, by: actor, program: { path: given, digest: pin }, args, cwd: cwd.slice(ws.root.length + 1) || ".", exitCode: r.exitCode, timedOut: r.timedOut, network: ws.network, sandbox: r.sandbox, durationMs: r.durationMs, changes, ...(gitGuarded.length ? { gitGuarded } : {}) });
+    const ref = cx.ledger.append("workspace-run", { workspace: ws.root, by: actor, program: { path: given, digest: pin }, args, cwd: cwd.slice(ws.root.length + 1) || ".", exitCode: r.exitCode, timedOut: r.timedOut, network: ws.network, sandbox: r.sandbox, durationMs: r.durationMs, changes, settled: settled.settled, lateWrites: settled.lateWrites, ...(gitGuarded.length ? { gitGuarded } : {}) });
     return {
       change: changes.length ? ref.trial : null, run: ref.trial, exitCode: r.exitCode, ...(r.timedOut ? { timedOut: true } : {}), passed: r.exitCode === 0 && !r.timedOut,
       durationMs: r.durationMs, sandbox: r.sandbox, network: ws.network, stdout: tail(r.stdout), stderr: tail(r.stderr), changes,
+      settled: settled.settled,
+      ...(settled.lateWrites ? { lateWrites: settled.lateWrites, lateNote: `${settled.lateWrites} file(s) appeared or changed after the run closed — a surviving child process wrote them; the accounting window stayed open and they are in the change set, so undo covers them` } : {}),
+      ...(!settled.settled ? { settledNote: "the workspace was still changing when the accounting window closed: something this run spawned was still writing. The change set holds the last state seen inside the window — undo covers what is listed, and whatever that process writes next is outside this run's accounting" } : {}),
       ...(gitGuarded.length ? { gitGuarded, gitNote: "the run tried to change .git persistence surfaces (hooks, config); every one was restored or removed — no hook or git-config command a run plants survives it" } : {}),
       note: changes.length ? `the run changed ${changes.length} file(s); undo it with context_edit {action: "undo", change: "${ref.trial}"}` : "the run changed no files",
     };
@@ -486,7 +530,7 @@ export function changes(cx, { workspace, since, diffs = true }) {
     .filter((e) => (e.kind === "edit" || e.kind === "workspace-run") && e.body.workspace === ws.root && (since === undefined || e.seq > Number(since)) && e.body.changes?.length)
     .map((e) => ({
       change: `${e.kind}-${e.seq}`, at: e.at, kind: e.kind, undone: undone.has(`${e.kind}-${e.seq}`),
-      ...(e.kind === "workspace-run" ? { command: [e.body.program.path, ...e.body.args].join(" "), exitCode: e.body.exitCode } : { reason: e.body.reason }),
+      ...(e.kind === "workspace-run" ? { command: [e.body.program.path, ...e.body.args].join(" "), exitCode: e.body.exitCode, ...(e.body.lateWrites ? { lateWrites: e.body.lateWrites } : {}), ...(e.body.settled === false ? { settled: false } : {}) } : { reason: e.body.reason }),
       files: e.body.changes.map((c) => ({
         path: c.path, kind: c.kind ?? (c.before ? (c.after ? "changed" : "removed") : "added"),
         ...(diffs && c.kind !== "changed-untracked" ? { diff: diffOf(cx, c) } : {}),

@@ -1,7 +1,7 @@
 // Acting on real code: a small JavaScript project with a bug and a failing test.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { changes, edit, overview, read, run, search, undo } from "../src/workspace.js";
@@ -80,6 +80,27 @@ test("a run's file changes are reported and can be undone; writes outside the wo
   await undo(cx, { change: r.change }, ACTOR);
   assert.equal(existsSync(join(ws, "gen.txt")), false);
   assert.equal(readFileSync(join(ws, "src", "math.js"), "utf8"), BUGGY);
+});
+
+test("a child that outlives its run is accounted: the late write joins the change set and undo reverts it", async () => {
+  rmSync(join(ws, "late.txt"), { force: true });
+  const script = `const {spawn}=require("child_process"); const c=spawn(process.execPath,["-e","setTimeout(()=>{try{require('fs').writeFileSync('late.txt','late')}catch(e){}},500)"],{detached:true,stdio:"ignore"}); c.unref();`;
+  const r = await run(cx, { workspace: ws, program: NODE, args: ["-e", script] }, ACTOR);
+  assert.equal(r.passed, true, r.stderr);
+  assert.ok(r.changes.some((c) => c.path === "late.txt" && c.kind === "added"), "the late write is in the ledgered change set");
+  assert.ok(r.lateWrites >= 1, `the accounting window saw it appear after the run closed (lateWrites: ${r.lateWrites ?? 0})`);
+  assert.match(r.lateNote, /surviving child process/);
+  const listed = changes(cx, { workspace: ws }).changes.find((c) => c.change === r.change);
+  assert.equal(listed.lateWrites, r.lateWrites, "the ledger carries the accounting too");
+  await undo(cx, { change: r.change }, ACTOR);
+  assert.equal(existsSync(join(ws, "late.txt")), false, "undo reverts the late write along with the run");
+});
+
+test("every run reports whether the workspace settled after it closed", async () => {
+  const r = await run(cx, { workspace: ws, program: NODE, args: ["-e", ""] }, ACTOR);
+  assert.equal(r.settled, true, r.settledNote);
+  assert.equal(r.lateWrites ?? 0, 0);
+  assert.equal(r.passed, true, r.stderr);
 });
 
 test("an undo refuses when the file changed since, and changes nothing", async () => {
