@@ -62,7 +62,9 @@ test("a crash on damaged input is a finding once it reproduces", async () => {
   for (const f of r.findings) {
     assert.equal(f.class, "crash");
     assert.equal(f.severity, "high");
-    assert.equal(f.signal, "SIGSEGV");
+    // sandbox-exec execs the program, so the SIGSEGV reaches the engine directly; bubblewrap forks,
+    // so the same death arrives as exit code 128+11. Both are the same crash.
+    assert.ok(f.signal === "SIGSEGV" || f.exitCode === 139, `signal=${f.signal} exitCode=${f.exitCode}`);
     assert.equal(f.reproduced, true);
     assert.match(f.statement, /crashes/);
   }
@@ -89,6 +91,17 @@ test("a silent accept on damaged input is a finding and contradicts the rejects 
   assert.ok(r.claims.filter((cl) => cl.id.includes(":rejects:")).every((cl) => cl.state === "contradicted"));
   assert.equal(r.contradictions.length, 4);
   assert.match(r.contradictions[0], /refuses input damaged by/);
+});
+
+test("a signal death a wrapper reports as 128+N is still a crash", async () => {
+  const faker = program("faker", 'if grep -q secret "$1"; then printf "ok\\n"; exit 0; fi\nexit 139');
+  regrant([faker]);
+  const op = { id: "faker.copy", program: faker, args: ["{in:data}"], inputs: { data: "text/plain" }, outputs: { stdout: "text/plain" } };
+  const r = await audit(cx, { operation: op, inputs: { data: [{ text: "the secret is safe\n" }] }, kinds: ["truncate"] }, ACTOR);
+  assert.equal(r.findings.length, 1, JSON.stringify(r.unconfirmed));
+  assert.equal(r.findings[0].class, "crash");
+  assert.equal(r.findings[0].exitCode, 139);
+  assert.match(r.findings[0].statement, /128\+11/);
 });
 
 test("a hang is a finding when the trial timeout kills it twice", async () => {

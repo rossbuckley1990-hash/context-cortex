@@ -177,7 +177,8 @@ sample meets every kind of deterministic damage, and a weakness counts only when
   operation needs at least one known-good source; each source is damaged by each kind while the
   other inputs take their first source.
 - **Kinds:** all of `truncate`, `corrupt-header`, `flip-middle`, `empty` unless `kinds` narrows them.
-- **Findings:** `crash` (killed by a signal), `silent-accept` (exit 0 with output on damaged input),
+- **Findings:** `crash` (death by a signal such as SIGSEGV — seen directly, or as exit code 128+N
+  when a sandbox wrapper like bubblewrap reports it), `silent-accept` (exit 0 with output on damaged input),
   `hang`, `resource-kill`, `output-flood`. Every candidate is repeated; it counts only when the same
   class reproduces. Anything else is reported as `unconfirmed`, never silently dropped.
 - **Claims:** the runs feed the same evidence machinery as negative controls. A clean refusal

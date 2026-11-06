@@ -6,7 +6,8 @@
 import { MUTATIONS } from "./formats.js";
 import { digestOf, isObject, now, Refusal } from "./util.js";
 
-const CRASH_SIGNALS = new Set(["SIGSEGV", "SIGABRT", "SIGBUS", "SIGILL", "SIGFPE", "SIGTRAP"]);
+const RESOURCE_SIGNALS = new Set(["SIGKILL", "SIGXCPU", "SIGXFSZ"]);
+const SIGNAL_NAMES = { 1: "SIGHUP", 2: "SIGINT", 3: "SIGQUIT", 4: "SIGILL", 5: "SIGTRAP", 6: "SIGABRT", 7: "SIGBUS", 8: "SIGFPE", 9: "SIGKILL", 10: "SIGUSR1", 11: "SIGSEGV", 12: "SIGUSR2", 13: "SIGPIPE", 14: "SIGALRM", 15: "SIGTERM", 17: "SIGCHLD", 18: "SIGCONT", 19: "SIGSTOP", 20: "SIGTSTP", 21: "SIGTTIN", 22: "SIGTTOU", 23: "SIGURG", 24: "SIGXCPU", 25: "SIGXFSZ", 27: "SIGPROF", 29: "SIGIO", 31: "SIGSYS" };
 
 /**
  * What one run's outcome means as a weakness, or null for a clean refusal (a damaged input
@@ -15,9 +16,20 @@ const CRASH_SIGNALS = new Set(["SIGSEGV", "SIGABRT", "SIGBUS", "SIGILL", "SIGFPE
 function classify(r) {
   if (r.timedOut) return { class: "hang", severity: "medium", detail: "did not finish within the trial timeout" };
   if (r.overflow) return { class: "output-flood", severity: "low", detail: "produced more output than the limit allows" };
-  if (r.exitCode === null && r.signal) {
-    if (r.signal === "SIGKILL") return { class: "resource-kill", severity: "medium", detail: "killed by SIGKILL: a CPU-time, file-size or output limit" };
-    return { class: "crash", severity: "high", detail: `killed by ${r.signal}` };
+  // A death by signal arrives two ways: directly (exitCode null, signal set — sandbox-exec execs
+  // the program, so it is our own child), or through a forking wrapper such as bubblewrap, which
+  // reports it as the shell convention 128+signal. The two cannot be told apart from the outside,
+  // so both are the same finding, with the form seen named in the detail.
+  let signal = r.exitCode === null ? r.signal : null;
+  let viaExit = false;
+  if (!signal && Number.isInteger(r.exitCode) && r.exitCode > 128 && r.exitCode <= 160) {
+    signal = SIGNAL_NAMES[r.exitCode - 128] ?? null;
+    viaExit = !!signal;
+  }
+  if (signal) {
+    const form = viaExit ? `exit code ${r.exitCode} (128+${r.exitCode - 128}), the wrapper-reported form of death by ${signal}` : `killed by ${signal}`;
+    if (RESOURCE_SIGNALS.has(signal)) return { class: "resource-kill", severity: "medium", detail: `${form}: a CPU-time, file-size or output limit` };
+    return { class: "crash", severity: "high", detail: form };
   }
   if (r.success) return { class: "silent-accept", severity: "high", detail: "exit 0 with output produced on damaged input: exit 0 is not success here" };
   return null;
